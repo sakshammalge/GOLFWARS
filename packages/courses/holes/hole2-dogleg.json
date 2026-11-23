@@ -3,6 +3,7 @@
   "name": "Dogleg",
   "par": 3,
   "tee": [0, 0, 6],
+  "startYaw": 0,
   "pieces": [
     {
       "type": "floor",

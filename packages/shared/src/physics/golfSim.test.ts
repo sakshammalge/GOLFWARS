@@ -147,6 +147,21 @@ describe('cup', () => {
   });
 });
 
+describe('ramps', () => {
+  it('a full-power shot up the dogleg ramp reaches the raised platform', () => {
+    const sim = new GolfSim(KITCHEN_TABLE[1]!);
+    sim.teleport([-3, 0.152, -3]);
+    sim.shoot(Math.PI / 2, 1); // towards -x, along leg 2
+    let maxY = 0;
+    for (let i = 0; i < 60 * 3; i++) {
+      sim.step();
+      maxY = Math.max(maxY, sim.position()[1]);
+    }
+    expect(maxY).toBeGreaterThan(0.6);
+    expect(sim.position()[0]).toBeLessThan(-8);
+  });
+});
+
 describe('previewShot', () => {
   it('returns an arc starting at the ball and leaves the scratch sim at the start', () => {
     const scratch = new GolfSim(KITCHEN_TABLE[0]!);

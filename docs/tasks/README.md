@@ -21,4 +21,4 @@ Files or packages to create or change (and ones to leave alone).
 Exact commands and manual steps to verify each criterion.
 ```
 
-Branch name: `m<milestone>/<task-id>-short-name`. See `CONTRIBUTING.md`.
+Branch name: `m<milestone>/<short-name>` (one branch and PR per milestone, one commit per task). See `CONTRIBUTING.md`.

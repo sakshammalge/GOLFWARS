@@ -44,6 +44,8 @@ export const holeSchema = z
     par: z.number().int().min(1).max(12),
     /** Where the ball is placed: a point on the surface of a floor/cup piece. */
     tee: vec3,
+    /** Initial camera/aim direction in degrees (0 = looking down -z). Defaults to tee -> cup. */
+    startYaw: finite.optional(),
     pieces: z.array(pieceSchema).min(1),
     cup: z.object({ position: vec3 }),
   })
