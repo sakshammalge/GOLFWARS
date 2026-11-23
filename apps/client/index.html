@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GolfWars</title>
+    <link rel="icon" href="data:," />
     <style>
       html,
       body {
@@ -26,6 +27,23 @@
         background: rgba(0, 0, 0, 0.6);
         color: #fff;
         font-size: 14px;
+      }
+      #debug {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #ff9;
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+        white-space: pre;
+        pointer-events: none;
+      }
+      #debug[hidden] {
+        display: none;
       }
       #status.ok {
         color: #8f8;
