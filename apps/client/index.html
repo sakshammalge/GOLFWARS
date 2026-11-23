@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GolfWars</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #1b2a1f;
+        font-family: system-ui, sans-serif;
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+      }
+      #status {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font-size: 14px;
+      }
+      #status.ok {
+        color: #8f8;
+      }
+      #status.bad {
+        color: #f88;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="status">Server: connecting...</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

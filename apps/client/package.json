@@ -1,0 +1,23 @@
+{
+  "name": "@golfwars/client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@golfwars/shared": "workspace:*",
+    "colyseus.js": "^0.16.22",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "vite": "^7.3.8",
+    "vitest": "^3.2.7"
+  }
+}
