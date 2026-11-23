@@ -15,8 +15,8 @@ const DRAG_SPEED = 0.005; // rad/px
  */
 export class CameraRig {
   yaw = 0;
-  pitch = MathUtils.degToRad(38);
-  distance = 7;
+  pitch = MathUtils.degToRad(42);
+  distance = 8;
   readonly target = new Vector3();
   private readonly goal = new Vector3();
 

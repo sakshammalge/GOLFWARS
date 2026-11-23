@@ -92,6 +92,12 @@ export class GolfSim {
     return [p.x, p.y, p.z];
   }
 
+  /** Ball orientation as a quaternion [x, y, z, w] (for rendering the roll). */
+  rotation(): [number, number, number, number] {
+    const q = this.body.rotation();
+    return [q.x, q.y, q.z, q.w];
+  }
+
   velocity(): Vec3 {
     const v = this.body.linvel();
     return [v.x, v.y, v.z];
