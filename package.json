@@ -12,6 +12,7 @@
     "dev": "pnpm build:libs && concurrently -n server,client -c blue,green \"pnpm --filter @golfwars/server dev\" \"pnpm --filter @golfwars/client dev\"",
     "build": "pnpm build:libs && pnpm --filter @golfwars/server --filter @golfwars/client build",
     "test": "pnpm build:libs && pnpm -r --workspace-concurrency=1 test",
+    "validate-courses": "pnpm build:libs && node tools/validate-courses.mjs",
     "lint": "eslint .",
     "typecheck": "pnpm build:libs && pnpm -r typecheck",
     "format": "prettier --write ."
