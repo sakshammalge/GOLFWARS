@@ -34,6 +34,11 @@ export interface LoadedHole {
   /** Where the ball should be placed on the tee (ball centre = tee + radius up). */
   tee: Vec3;
   cup: Vec3;
+  /**
+   * Centres of the `windingPost` pieces. The post itself is a solid cylinder (the ball bounces off
+   * it, Windups walk around it); how close you must stand to rewind is a shared gameplay number.
+   */
+  windingPosts: Vec3[];
 }
 
 /**
@@ -43,12 +48,13 @@ export interface LoadedHole {
 export function loadHoleIntoWorld(world: World, hole: Hole, opts: LoadOptions): LoadedHole {
   const surfaceByCollider = new Map<number, Surface>();
   let cupSensor: Collider | null = null;
+  const windingPosts: Vec3[] = [];
 
   for (const piece of hole.pieces) {
     const surface = resolveSurface(piece);
     const mat = opts.surfaces[surface];
     const restitution =
-      piece.type === 'wall'
+      piece.type === 'wall' || piece.type === 'windingPost'
         ? opts.wallRestitution
         : piece.type === 'bumper'
           ? opts.bumperRestitution
@@ -61,7 +67,8 @@ export function loadHoleIntoWorld(world: World, hole: Hole, opts: LoadOptions): 
       return c;
     };
 
-    if (piece.type === 'bumper') {
+    if (piece.type === 'bumper' || piece.type === 'windingPost') {
+      if (piece.type === 'windingPost') windingPosts.push([...piece.position]);
       const [d, h] = resolveSize(piece);
       add(
         RAPIER.ColliderDesc.cylinder(h / 2, d / 2)
@@ -103,6 +110,7 @@ export function loadHoleIntoWorld(world: World, hole: Hole, opts: LoadOptions): 
     surfaceByCollider,
     tee: [...hole.tee],
     cup: [...hole.cup.position],
+    windingPosts,
   };
 }
 

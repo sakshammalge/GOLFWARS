@@ -14,6 +14,7 @@
     "test": "pnpm build:libs && pnpm -r --workspace-concurrency=1 test",
     "validate-courses": "pnpm build:libs && node tools/validate-courses.mjs",
     "e2e:m1": "node tools/e2e-m1.mjs",
+    "e2e:m2": "node tools/e2e-m2.mjs",
     "lint": "eslint .",
     "typecheck": "pnpm build:libs && pnpm -r typecheck",
     "format": "prettier --write ."

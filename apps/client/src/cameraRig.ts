@@ -8,15 +8,21 @@ const MAX_DIST = 18;
 const KEY_ORBIT_SPEED = 1.8; // rad/s for Q/E
 const DRAG_SPEED = 0.005; // rad/px
 
+/** A right-button press that moves less than this (px) is a click (club swing), not an orbit drag. */
+const CLICK_MAX_MOVE = 5;
+
 /**
- * Third-person orbit camera that follows a target (the ball). Orbit with right/middle mouse drag
- * or Q/E, zoom with the wheel. Pitch and distance are clamped so the camera never flips or ends
+ * Third-person orbit camera that follows a target (the Windup, or the ball after a shot). Orbit
+ * with right/middle mouse drag or Q/E, zoom with the wheel; a right click without dragging calls
+ * `onRightClick` (the club swing). Pitch and distance are clamped so the camera never flips or ends
  * up inside the scene's geometry at a sensible scale.
  */
 export class CameraRig {
   yaw = 0;
-  pitch = MathUtils.degToRad(42);
-  distance = 8;
+  pitch = MathUtils.degToRad(50);
+  distance = 7;
+  /** Called on a right click that was not a drag. */
+  onRightClick: () => void = () => {};
   readonly target = new Vector3();
   private readonly goal = new Vector3();
 
@@ -26,19 +32,25 @@ export class CameraRig {
     private readonly keys: Keys,
   ) {
     let dragging = false;
+    let moved = 0;
     dom.addEventListener('contextmenu', (e) => e.preventDefault());
     dom.addEventListener('pointerdown', (e) => {
       if (e.button === 2 || e.button === 1) {
         dragging = true;
+        moved = 0;
         dom.setPointerCapture(e.pointerId);
         e.preventDefault();
       }
     });
     dom.addEventListener('pointerup', (e) => {
-      if (dragging && (e.button === 2 || e.button === 1)) dragging = false;
+      if (dragging && (e.button === 2 || e.button === 1)) {
+        dragging = false;
+        if (e.button === 2 && moved < CLICK_MAX_MOVE) this.onRightClick();
+      }
     });
     dom.addEventListener('pointermove', (e) => {
       if (!dragging) return;
+      moved += Math.abs(e.movementX) + Math.abs(e.movementY);
       this.orbit(-e.movementX * DRAG_SPEED, e.movementY * DRAG_SPEED);
     });
     dom.addEventListener(
