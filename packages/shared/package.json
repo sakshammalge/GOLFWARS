@@ -21,5 +21,9 @@
   },
   "devDependencies": {
     "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "@golfwars/courses": "workspace:*"
   }
 }

@@ -1,5 +1,6 @@
+import { Game } from './game.js';
 import { connect, type NetStatus } from './network.js';
-import { startScene } from './scene.js';
+import { createStage } from './scene.js';
 
 const statusEl = document.getElementById('status')!;
 
@@ -13,5 +14,7 @@ function render(s: NetStatus): void {
         : 'Server: disconnected';
 }
 
-startScene(document.getElementById('app')!);
+const game = new Game(createStage(document.getElementById('app')!));
+void game.start();
+// The server is optional in M1: a failed connection only changes the status label.
 void connect(render);

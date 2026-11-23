@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GolfWars</title>
+    <link rel="icon" href="data:," />
     <style>
       html,
       body {
@@ -26,6 +27,174 @@
         background: rgba(0, 0, 0, 0.6);
         color: #fff;
         font-size: 14px;
+      }
+      #debug {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #ff9;
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+        white-space: pre;
+        pointer-events: none;
+      }
+      #debug[hidden] {
+        display: none;
+      }
+      #hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        color: #fff;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+      }
+      #hud-strokes {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px 16px;
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.55);
+        font-size: 20px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      #hud-meter {
+        position: absolute;
+        bottom: 56px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 360px;
+        height: 26px;
+        border-radius: 13px;
+        background: rgba(0, 0, 0, 0.55);
+        border: 2px solid rgba(255, 255, 255, 0.85);
+        overflow: hidden;
+      }
+      #hud-meter[hidden],
+      #hud-toast[hidden] {
+        display: none;
+      }
+      #hud-meter-fill {
+        height: 100%;
+        width: 0;
+        background: linear-gradient(90deg, #7ddc6b, #f2d94e 60%, #ef5a4c);
+      }
+      #hud-meter-text {
+        position: absolute;
+        inset: 0;
+        text-align: center;
+        line-height: 26px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      #hud-toast {
+        position: absolute;
+        top: 64px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px 14px;
+        border-radius: 8px;
+        background: rgba(200, 60, 40, 0.85);
+        font-weight: 600;
+      }
+      #hud-hint {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 4px 12px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.45);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      #hud-banner {
+        position: absolute;
+        top: 28%;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 14px 36px;
+        border-radius: 14px;
+        background: rgba(20, 30, 40, 0.72);
+        text-align: center;
+      }
+      #hud-banner[hidden],
+      #scorecard[hidden] {
+        display: none;
+      }
+      #hud-banner .main {
+        font-size: 36px;
+        font-weight: 700;
+      }
+      #hud-banner .sub {
+        margin-top: 4px;
+        font-size: 18px;
+        opacity: 0.9;
+      }
+      #scorecard {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        min-width: 420px;
+        padding: 22px 32px 26px;
+        border-radius: 16px;
+        background: rgba(20, 30, 40, 0.88);
+        text-align: center;
+        pointer-events: auto;
+      }
+      #scorecard h2 {
+        margin: 0 0 14px;
+        font-size: 26px;
+      }
+      #scorecard table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 18px;
+      }
+      #scorecard th,
+      #scorecard td {
+        padding: 6px 10px;
+        text-align: right;
+      }
+      #scorecard th:first-child,
+      #scorecard td:first-child {
+        text-align: left;
+      }
+      #scorecard th {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+        font-size: 14px;
+        opacity: 0.8;
+      }
+      #scorecard tr.under td:last-child {
+        color: #8f8;
+      }
+      #scorecard tr.over td:last-child {
+        color: #f99;
+      }
+      #scorecard tr.total td {
+        border-top: 1px solid rgba(255, 255, 255, 0.4);
+        font-weight: 700;
+      }
+      #play-again {
+        margin-top: 18px;
+        padding: 10px 28px;
+        border: 0;
+        border-radius: 10px;
+        background: #3f9d7c;
+        color: #fff;
+        font-size: 18px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      #play-again:hover {
+        background: #4cb892;
       }
       #status.ok {
         color: #8f8;

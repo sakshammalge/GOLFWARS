@@ -12,12 +12,15 @@
     "dev": "pnpm build:libs && concurrently -n server,client -c blue,green \"pnpm --filter @golfwars/server dev\" \"pnpm --filter @golfwars/client dev\"",
     "build": "pnpm build:libs && pnpm --filter @golfwars/server --filter @golfwars/client build",
     "test": "pnpm build:libs && pnpm -r --workspace-concurrency=1 test",
+    "validate-courses": "pnpm build:libs && node tools/validate-courses.mjs",
+    "e2e:m1": "node tools/e2e-m1.mjs",
     "lint": "eslint .",
     "typecheck": "pnpm build:libs && pnpm -r typecheck",
     "format": "prettier --write ."
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.65.1",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.5",
     "globals": "^16.5.0",

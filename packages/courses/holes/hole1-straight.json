@@ -1,0 +1,74 @@
+{
+  "id": "kitchen-1",
+  "name": "Straight Shot",
+  "par": 2,
+  "tee": [0, 0, 6.5],
+  "pieces": [
+    {
+      "type": "floor",
+      "position": [0, -0.2, 5.75],
+      "rotation": 0,
+      "size": [3.2, 0.4, 3.5],
+      "surface": "wood"
+    },
+    {
+      "type": "floor",
+      "position": [0, -0.2, 2],
+      "rotation": 0,
+      "size": [3.2, 0.4, 4],
+      "surface": "felt"
+    },
+    {
+      "type": "floor",
+      "position": [0, -0.2, -1],
+      "rotation": 0,
+      "size": [3.2, 0.4, 2],
+      "surface": "sugar"
+    },
+    {
+      "type": "floor",
+      "position": [0, -0.2, -3.5],
+      "rotation": 0,
+      "size": [3.2, 0.4, 3],
+      "surface": "wood"
+    },
+    {
+      "type": "cup",
+      "position": [0, -0.2, -6.5],
+      "rotation": 0,
+      "size": [3.2, 0.4, 3],
+      "surface": "felt"
+    },
+    {
+      "type": "wall",
+      "position": [-1.75, 0.3, -0.25],
+      "rotation": 0,
+      "size": [0.3, 0.6, 15.8],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [1.75, 0.3, -0.25],
+      "rotation": 0,
+      "size": [0.3, 0.6, 15.8],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [0, 0.3, 7.65],
+      "rotation": 0,
+      "size": [3.8, 0.6, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [0, 0.3, -8.15],
+      "rotation": 0,
+      "size": [3.8, 0.6, 0.3],
+      "surface": "wood"
+    }
+  ],
+  "cup": {
+    "position": [0, 0, -6.5]
+  }
+}

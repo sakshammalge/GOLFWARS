@@ -1,0 +1,116 @@
+{
+  "id": "kitchen-3",
+  "name": "Bumper Field",
+  "par": 3,
+  "tee": [0, 0, 6],
+  "pieces": [
+    {
+      "type": "floor",
+      "position": [0, -0.2, 5],
+      "rotation": 0,
+      "size": [6, 0.4, 4],
+      "surface": "wood"
+    },
+    {
+      "type": "floor",
+      "position": [0, -0.2, 0],
+      "rotation": 0,
+      "size": [6, 0.4, 6],
+      "surface": "felt"
+    },
+    {
+      "type": "floor",
+      "position": [0, -0.2, -4],
+      "rotation": 0,
+      "size": [6, 0.4, 2],
+      "surface": "sugar"
+    },
+    {
+      "type": "cup",
+      "position": [0, -0.2, -7],
+      "rotation": 0,
+      "size": [6, 0.4, 4],
+      "surface": "felt"
+    },
+    {
+      "type": "wall",
+      "position": [-3.15, 0.3, -1],
+      "rotation": 0,
+      "size": [0.3, 0.6, 16.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [3.15, 0.3, -1],
+      "rotation": 0,
+      "size": [0.3, 0.6, 16.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [0, 0.3, 7.15],
+      "rotation": 0,
+      "size": [6.6, 0.6, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [0, 0.3, -9.15],
+      "rotation": 0,
+      "size": [6.6, 0.6, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "bumper",
+      "position": [-1.6, 0.3, 1.8],
+      "rotation": 0,
+      "size": [0.9, 0.6, 0.9],
+      "surface": "wood"
+    },
+    {
+      "type": "bumper",
+      "position": [1.6, 0.3, 1.8],
+      "rotation": 0,
+      "size": [0.9, 0.6, 0.9],
+      "surface": "wood"
+    },
+    {
+      "type": "bumper",
+      "position": [0, 0.3, 0],
+      "rotation": 0,
+      "size": [0.9, 0.6, 0.9],
+      "surface": "wood"
+    },
+    {
+      "type": "bumper",
+      "position": [-2.0, 0.3, -1.8],
+      "rotation": 0,
+      "size": [0.9, 0.6, 0.9],
+      "surface": "wood"
+    },
+    {
+      "type": "bumper",
+      "position": [2.0, 0.3, -1.8],
+      "rotation": 0,
+      "size": [0.9, 0.6, 0.9],
+      "surface": "wood"
+    },
+    {
+      "type": "bumper",
+      "position": [-0.9, 0.3, -3.9],
+      "rotation": 0,
+      "size": [0.9, 0.6, 0.9],
+      "surface": "wood"
+    },
+    {
+      "type": "bumper",
+      "position": [0.9, 0.3, -3.9],
+      "rotation": 0,
+      "size": [0.9, 0.6, 0.9],
+      "surface": "wood"
+    }
+  ],
+  "cup": {
+    "position": [0, 0, -7]
+  }
+}

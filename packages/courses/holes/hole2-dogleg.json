@@ -1,0 +1,104 @@
+{
+  "id": "kitchen-2",
+  "name": "Dogleg",
+  "par": 3,
+  "tee": [0, 0, 6],
+  "startYaw": 0,
+  "pieces": [
+    {
+      "type": "floor",
+      "position": [0, -0.2, 5],
+      "rotation": 0,
+      "size": [3, 0.4, 4],
+      "surface": "wood"
+    },
+    {
+      "type": "floor",
+      "position": [0, -0.2, 0.75],
+      "rotation": 0,
+      "size": [3, 0.4, 4.5],
+      "surface": "felt"
+    },
+    {
+      "type": "floor",
+      "position": [0, -0.2, -3],
+      "rotation": 0,
+      "size": [3, 0.4, 3],
+      "surface": "sugar"
+    },
+    {
+      "type": "floor",
+      "position": [-3.25, -0.2, -3],
+      "rotation": 0,
+      "size": [3.5, 0.4, 3],
+      "surface": "wood"
+    },
+    {
+      "type": "ramp",
+      "position": [-6.4984, 0.1651, -3],
+      "rotation": -90,
+      "size": [3, 0.3, 3.0],
+      "surface": "wood",
+      "slope": 12
+    },
+    {
+      "type": "floor",
+      "position": [-8.7, 0.4237, -3],
+      "rotation": 0,
+      "size": [1.6, 0.4, 3],
+      "surface": "felt"
+    },
+    {
+      "type": "cup",
+      "position": [-11.0, 0.4237, -3],
+      "rotation": 0,
+      "size": [3, 0.4, 3],
+      "surface": "felt"
+    },
+    {
+      "type": "wall",
+      "position": [1.65, 0.35, 1.35],
+      "rotation": 0,
+      "size": [0.3, 1.1, 12.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-1.65, 0.35, 3.0],
+      "rotation": 0,
+      "size": [0.3, 1.1, 9.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [0, 0.35, 7.65],
+      "rotation": 0,
+      "size": [3.6, 1.1, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-7.2, 0.35, -1.35],
+      "rotation": 0,
+      "size": [10.9, 1.1, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-5.45, 0.35, -4.65],
+      "rotation": 0,
+      "size": [14.4, 1.1, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-12.65, 0.35, -3],
+      "rotation": 0,
+      "size": [0.3, 1.1, 3.6],
+      "surface": "wood"
+    }
+  ],
+  "cup": {
+    "position": [-11.0, 0.6237, -3]
+  }
+}

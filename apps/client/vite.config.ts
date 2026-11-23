@@ -2,5 +2,17 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   server: { port: 5173 },
-  build: { chunkSizeWarningLimit: 900 },
+  build: {
+    // Rapier's compat build embeds its WASM as base64 (about 4 MB raw, 1.6 MB gzipped).
+    chunkSizeWarningLimit: 4500,
+    rollupOptions: {
+      output: {
+        // Separate long-lived vendor chunks so a game-code change does not re-download them.
+        manualChunks(id) {
+          if (id.includes('@dimforge/rapier3d-compat')) return 'rapier';
+          if (id.includes('/three/')) return 'three';
+        },
+      },
+    },
+  },
 });
