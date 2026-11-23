@@ -75,6 +75,20 @@ describe('loadHoleIntoWorld', () => {
     await RAPIER.init();
   });
 
+  it('records winding posts (holes 2 and 3 have one) as solid colliders', () => {
+    expect(
+      KITCHEN_TABLE.map((h) => h.pieces.filter((p) => p.type === 'windingPost').length),
+    ).toEqual([0, 1, 1]);
+    for (const hole of KITCHEN_TABLE) {
+      const world = new RAPIER.World({ x: 0, y: -10, z: 0 });
+      const loaded = loadHoleIntoWorld(world, hole, opts);
+      expect(loaded.windingPosts).toHaveLength(
+        hole.pieces.filter((p) => p.type === 'windingPost').length,
+      );
+      world.free();
+    }
+  });
+
   it('creates colliders for every piece and a cup sensor', () => {
     for (const hole of KITCHEN_TABLE) {
       const world = new RAPIER.World({ x: 0, y: -10, z: 0 });
