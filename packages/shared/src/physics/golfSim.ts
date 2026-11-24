@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Collider, RigidBody, World } from '@dimforge/rapier3d-compat';
 import { loadHoleIntoWorld, type Hole, type LoadedHole, type Surface } from '@golfwars/courses';
+import { BALL_GROUPS } from '../character/groups.js';
 import { PHYSICS, STEP_DT } from './config.js';
 
 export type Vec3 = [number, number, number];
@@ -49,6 +50,10 @@ export class GolfSim {
       bumperRestitution: PHYSICS.bumperRestitution,
     });
 
+    // Course colliders are static: one step puts them in the broad phase so character-controller
+    // and ray queries work before the first real tick.
+    this.world.step();
+
     const b = PHYSICS.ball;
     this.body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
@@ -60,7 +65,9 @@ export class GolfSim {
       RAPIER.ColliderDesc.ball(b.radius)
         .setMass(b.mass)
         .setRestitution(b.restitution)
-        .setFriction(b.friction),
+        .setFriction(b.friction)
+        // Windups are invisible to the ball (see character/groups.ts).
+        .setCollisionGroups(BALL_GROUPS),
       this.body,
     );
     this.lastRest = this.teePosition();
@@ -198,7 +205,7 @@ export class GolfSim {
       PHYSICS.ball.radius + 0.04,
       true,
       RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-      undefined,
+      BALL_GROUPS,
       this.collider,
     );
     this.grounded = hit ? (this.loaded.surfaceByCollider.get(hit.collider.handle) ?? null) : null;

@@ -1,7 +1,11 @@
 // Local-only browser check for M1 (not run in CI: it needs a Chrome binary and WebGL).
 //
-//   pnpm build && pnpm --filter @golfwars/client preview   # serves http://localhost:4173
+//   pnpm build:libs && pnpm --filter @golfwars/client dev   # serves http://localhost:5173
 //   pnpm e2e:m1                                             # or GOLFWARS_URL=... pnpm e2e:m1
+//
+// It must run against the Vite DEV server: the `?cheats` hook is stripped from production builds.
+// Since M2 the ball is hit by walking up to it, and the Windup starts beside the ball, so the
+// scripted shot below still works; M2 behaviour is covered by tools/e2e-m2.mjs.
 //
 // Plays a scripted round with Playwright, asserts the stroke counter / banners / scorecard and
 // saves screenshots to docs/screenshots/m1-*.png. Uses the system Chrome (software GL).
@@ -9,7 +13,7 @@ import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 
-const base = process.env.GOLFWARS_URL ?? 'http://localhost:4173';
+const base = process.env.GOLFWARS_URL ?? 'http://localhost:5173';
 const chrome = process.env.CHROME_PATH ?? '/usr/bin/google-chrome';
 const outDir = fileURLToPath(new URL('../docs/screenshots/', import.meta.url));
 mkdirSync(outDir, { recursive: true });

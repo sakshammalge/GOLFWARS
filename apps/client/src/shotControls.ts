@@ -16,7 +16,8 @@ export interface ShotControlsEvents {
 
 /**
  * Hold left mouse to charge (power ping-pongs 0-100%), release to shoot, Escape cancels.
- * A/D nudge the aim left/right of the camera direction.
+ * Left/Right arrows (and A/D while charging, when the Windup is planted) nudge the aim left/right
+ * of the camera direction.
  */
 export class ShotControls {
   charging = false;
@@ -49,7 +50,7 @@ export class ShotControls {
     window.addEventListener('blur', () => this.cancel());
   }
 
-  /** The ball must be at rest (and the round in play) for shots to be allowed. */
+  /** The Windup must be next to a resting ball (and the round in play) for shots to be allowed. */
   setEnabled(on: boolean): void {
     this.enabled = on;
     if (!on) this.cancel();
@@ -66,7 +67,9 @@ export class ShotControls {
 
   update(dt: number): void {
     if (this.enabled) {
-      const dir = this.keys.axis('KeyD', 'KeyA'); // A = left (+), D = right (-)
+      // Left = +, right = -. A/D only aim while charging; otherwise they run the Windup.
+      const arrows = this.keys.axis('ArrowRight', 'ArrowLeft');
+      const dir = this.charging ? arrows + this.keys.axis('KeyD', 'KeyA') : arrows;
       const max = MathUtils.degToRad(FINE_AIM_MAX_DEG);
       this.aimOffset = MathUtils.clamp(
         this.aimOffset + dir * MathUtils.degToRad(FINE_AIM_DEG_PER_S) * dt,

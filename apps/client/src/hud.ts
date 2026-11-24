@@ -7,6 +7,10 @@ export class Hud {
   private readonly meter = document.createElement('div');
   private readonly meterFill = document.createElement('div');
   private readonly meterText = document.createElement('div');
+  private readonly keyBox = document.createElement('div');
+  private readonly keyFill = document.createElement('div');
+  private readonly keyLabel = document.createElement('div');
+  private readonly prompt = document.createElement('div');
   private readonly toast = document.createElement('div');
   private readonly banner = document.createElement('div');
   private readonly card = document.createElement('div');
@@ -20,6 +24,17 @@ export class Hud {
     this.meterFill.id = 'hud-meter-fill';
     this.meterText.id = 'hud-meter-text';
     this.meter.append(this.meterFill, this.meterText);
+    this.keyBox.id = 'hud-key';
+    const keyIcon = document.createElement('div');
+    keyIcon.id = 'hud-key-icon';
+    const keyBar = document.createElement('div');
+    keyBar.id = 'hud-key-bar';
+    this.keyFill.id = 'hud-key-fill';
+    this.keyLabel.id = 'hud-key-label';
+    keyBar.append(this.keyFill, this.keyLabel);
+    this.keyBox.append(keyIcon, keyBar);
+    this.prompt.id = 'hud-prompt';
+    this.prompt.hidden = true;
     this.toast.id = 'hud-toast';
     this.toast.hidden = true;
     this.banner.id = 'hud-banner';
@@ -30,8 +45,17 @@ export class Hud {
     const hint = document.createElement('div');
     hint.id = 'hud-hint';
     hint.textContent =
-      'Hold LEFT MOUSE to charge, release to shoot (Esc cancels)  |  Right-drag or Q/E: orbit  |  Wheel: zoom  |  A/D: fine aim  |  F3: debug';
-    this.root.append(this.strokes, this.toast, this.banner, this.meter, hint, this.card);
+      'WASD run  |  Shift sprint  |  Space jump  |  Hold LEFT MOUSE next to your ball to charge, release to hit  |  Right-click or F: bonk  |  Q/E or right-drag: camera  |  Arrows: fine aim  |  F3: debug';
+    this.root.append(
+      this.strokes,
+      this.keyBox,
+      this.toast,
+      this.banner,
+      this.prompt,
+      this.meter,
+      hint,
+      this.card,
+    );
     document.body.appendChild(this.root);
   }
 
@@ -45,6 +69,20 @@ export class Hud {
     if (power === null) return;
     this.meterFill.style.width = `${(power * 100).toFixed(1)}%`;
     this.meterText.textContent = `${Math.round(power * 100)}%`;
+  }
+
+  /** Wind-up key meter: `key` 0..1. Low keys pulse red; frozen shows a label instead of the value. */
+  setKey(key: number, frozen: boolean): void {
+    this.keyFill.style.width = `${(key * 100).toFixed(1)}%`;
+    this.keyBox.classList.toggle('low', key < 0.25 && !frozen);
+    this.keyBox.classList.toggle('frozen', frozen);
+    this.keyLabel.textContent = frozen ? 'UNWOUND' : `${Math.round(key * 100)}%`;
+  }
+
+  /** One line of context help above the power meter (null hides it). */
+  setPrompt(text: string | null): void {
+    this.prompt.hidden = text === null;
+    if (text !== null && this.prompt.textContent !== text) this.prompt.textContent = text;
   }
 
   showToast(text: string, ms = 2200): void {

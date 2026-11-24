@@ -4,6 +4,7 @@ export class Keys {
 
   constructor() {
     window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
       if (e.repeat) return;
       this.down.add(e.code);
     });
