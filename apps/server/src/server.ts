@@ -1,8 +1,8 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import { Server } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
-import { LOBBY_TEST_ROOM, PROTOCOL_VERSION, type HealthResponse } from '@golfwars/shared';
-import { LobbyTestRoom } from './LobbyTestRoom.js';
+import { GOLF_ROOM, PROTOCOL_VERSION, type HealthResponse } from '@golfwars/shared';
+import { GolfRoom, type GolfRoomConfig } from './GolfRoom.js';
 
 export interface GameServer {
   http: HttpServer;
@@ -16,7 +16,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
 };
 
-export function createGameServer(): GameServer {
+export function createGameServer(config: Partial<GolfRoomConfig> = {}): GameServer {
   const http = createServer((req, res) => {
     const path = (req.url ?? '').split('?')[0];
     if (req.method === 'OPTIONS') {
@@ -35,7 +35,9 @@ export function createGameServer(): GameServer {
     transport: new WebSocketTransport({ server: http }),
     gracefullyShutdown: false,
   });
-  colyseus.define(LOBBY_TEST_ROOM, LobbyTestRoom);
+  // The config is bound into the room class (not passed as define() options) so that a client
+  // can never override it through its join options.
+  colyseus.define(GOLF_ROOM, GolfRoom.withConfig(config));
 
   return {
     http,

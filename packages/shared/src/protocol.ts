@@ -1,15 +1,30 @@
 /** Bump when client and server can no longer talk to each other. */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
-/** Name of the M0 connectivity-test room. */
-export const LOBBY_TEST_ROOM = 'lobby_test';
+/** Name of the game room. A room's id is its 5-letter room code. */
+export const GOLF_ROOM = 'golf';
 
 export const DEFAULT_SERVER_PORT = 2567;
 
-/** Message type names, client -> server and server -> client. */
+/** Message type names, client -> server (c) and server -> client (s). */
 export const MessageType = {
+  /** c: clock / RTT probe. */
   Ping: 'ping',
+  /** s: answer to a ping. */
   Pong: 'pong',
+  /** c: a batch of per-tick inputs. */
+  Input: 'in',
+  /** s: binary world snapshot. */
+  Snapshot: 'S',
+  /** s: discrete game events (shots, bonks, holed, ...). */
+  Event: 'ev',
+  /** c: lobby actions. */
+  SetNick: 'nick',
+  SetColor: 'color',
+  Ready: 'ready',
+  Start: 'start',
+  /** c: host sends everyone back to the lobby after the scoreboard. */
+  Rematch: 'rematch',
 } as const;
 
 export interface PingMessage {
@@ -20,6 +35,8 @@ export interface PingMessage {
 export interface PongMessage {
   /** The client timestamp from the matching ping. */
   t: number;
+  /** Server sim tick when the ping was handled (0 before a match starts). */
+  tick: number;
 }
 
 export interface HealthResponse {
@@ -31,3 +48,23 @@ export interface HealthResponse {
 export function roundTripMs(sentAt: number, now: number): number {
   return Math.max(0, Math.round(now - sentAt));
 }
+
+/** What the player options carry when creating or joining a room. */
+export interface JoinOptions {
+  nickname?: string;
+  /** Preferred colour index (0..7); the server picks a free one if it is taken. */
+  color?: number;
+  protocol?: number;
+}
+
+export type LobbyPhase = 'lobby' | 'match';
+
+/** Discrete things that happen in a match, broadcast reliably (the physics goes in snapshots). */
+export type GameEvent =
+  | { k: 'shot'; p: number }
+  | { k: 'oob'; p: number }
+  | { k: 'holed'; p: number; s: number }
+  | { k: 'bonk'; a: number; v: number }
+  | { k: 'fell'; p: number }
+  | { k: 'timeout'; p: number }
+  | { k: 'hole'; i: number };

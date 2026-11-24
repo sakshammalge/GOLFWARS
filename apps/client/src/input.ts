@@ -4,6 +4,8 @@ export class Keys {
 
   constructor() {
     window.addEventListener('keydown', (e) => {
+      // Typing in the lobby (nickname, room code) must not be eaten by the game controls.
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
       if (e.repeat) return;
       this.down.add(e.code);
