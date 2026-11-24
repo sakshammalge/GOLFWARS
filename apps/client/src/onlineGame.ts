@@ -11,7 +11,7 @@ import {
   RingGeometry,
   Vector3,
 } from 'three';
-import { KITCHEN_TABLE, type Hole } from '@golfwars/courses';
+import { KITCHEN_TABLE, KITCHEN_TABLE_NAME, type Hole } from '@golfwars/courses';
 import {
   GolfSim,
   NET,
@@ -24,8 +24,8 @@ import {
   Windup,
   Predictor,
   createCourseWorld,
-  holeEndText,
   holeIntroText,
+  ordinal,
   inBallReach,
   previewShot,
   toEntry,
@@ -46,7 +46,7 @@ import { Hud } from './hud.js';
 import type { Connection } from './net/connection.js';
 import type { Stage } from './scene.js';
 import { ShotControls } from './shotControls.js';
-import { Leaderboard, MatchBoard, readPlayers, type PlayerRow } from './ui/matchUi.js';
+import { HoleResults, Leaderboard, MatchBoard, readPlayers, type PlayerRow } from './ui/matchUi.js';
 import { Nameplates } from './ui/nameplates.js';
 import type { NetPanel } from './ui/netPanel.js';
 import { WindupModel } from './windupModel.js';
@@ -122,6 +122,7 @@ export class OnlineGame {
   private readonly controls: ShotControls;
   private readonly leaderboard = new Leaderboard();
   private readonly board = new MatchBoard();
+  private readonly results = new HoleResults();
   private readonly plates = new Nameplates();
   private readonly table = new Mesh(
     new BoxGeometry(120, 1, 120),
@@ -227,6 +228,7 @@ export class OnlineGame {
     this.sceneGroup.visible = false;
     this.leaderboard.hide();
     this.board.hide();
+    this.results.hide();
     this.plates.clear();
     this.disposeHole();
     for (const r of this.remotes.values()) r.dispose();
@@ -309,31 +311,36 @@ export class OnlineGame {
     this.players = readPlayers(state);
     const holes = KITCHEN_TABLE;
     const pars = holes.map((h) => h.par);
-    this.leaderboard.update(this.players, this.conn.sessionId, pars);
+    this.leaderboard.update(this.players, this.conn.sessionId);
 
     const mp = state.matchPhase as MatchPhase;
     const idx = state.holeIndex as number;
     const hole = holes[idx] ?? holes[0]!;
-    const me = this.players.find((p) => p.slot === this.slot);
+    const left = state.timeLeft as number;
     if (mp === 'hole-intro') {
       this.hud.setBanner(
         holeIntroText({ holes, index: idx, phase: 'hole-intro', strokes: 0, results: [] }),
-        `Hole ${idx + 1} of ${holes.length}`,
+        `Hole ${idx + 1} of ${holes.length}  -  starting in ${left}`,
       );
-    } else if (mp === 'hole-end' && me) {
-      const strokes = me.scores[idx] ?? me.strokes;
-      this.hud.setBanner(holeEndText({ ...hole, strokes }), `${hole.name} complete`);
     } else {
       this.hud.setBanner(null);
     }
-    if (mp === 'finished') {
+    if (mp === 'hole-end') this.results.show(this.players, idx, hole.name, hole.par, left);
+    else this.results.hide();
+    if (mp === 'results') {
       this.board.show(
         this.players,
+        KITCHEN_TABLE_NAME,
         holes.map((h) => h.name),
         pars,
+        this.conn.sessionId,
         state.hostId === this.conn.sessionId,
-        () => this.conn.send('rematch'),
-        () => this.conn.leave(),
+        {
+          vote: (v) => this.conn.send('rvote', { v }),
+          again: () => this.conn.send('rematch', { mode: 'again' }),
+          lobby: () => this.conn.send('rematch', { mode: 'lobby' }),
+          leave: () => this.conn.leave(),
+        },
       );
     } else {
       this.board.hide();
@@ -408,11 +415,15 @@ export class OnlineGame {
           if (e.p === this.slot)
             this.hud.showToast('Fell off the table! Back to your ball (no penalty)');
           break;
-        case 'holed':
+        case 'holed': {
+          const bonus = e.b < 0 ? ` (${e.b} bonus)` : '';
           this.hud.showToast(
-            e.p === this.slot ? `You holed out in ${e.s}!` : `${name(e.p)} holed out in ${e.s}`,
+            e.p === this.slot
+              ? `You holed out in ${e.s} - ${ordinal(e.r)} to finish${bonus}!`
+              : `${name(e.p)} holed out in ${e.s} - ${ordinal(e.r)}${bonus}`,
           );
           break;
+        }
         case 'timeout':
           if (e.p === this.slot) this.hud.showToast("Time's up! Par + 3 for this hole");
           break;

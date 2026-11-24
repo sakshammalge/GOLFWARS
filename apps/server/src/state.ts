@@ -17,9 +17,18 @@ export const PlayerState = schema(
     /** Strokes on the current hole. */
     strokes: 'uint8',
     holed: 'boolean',
+    /** Finish order on the current hole (1 = first to hole out, 0 = not holed yet). */
+    finish: 'uint8',
     /** Strokes on finished holes, in play order. */
     scores: { array: 'uint8' },
-    total: 'uint16',
+    /** Finish-order bonus (-2, -1, 0) of each finished hole. */
+    bonus: { array: 'int8' },
+    /** Placement of each finished hole by points (1 = best, ties share). */
+    places: { array: 'uint8' },
+    /** Total points: strokes + finish bonuses of the finished holes (can be negative). */
+    total: 'int16',
+    /** At the results: wants another match with the same players. */
+    vote: 'boolean',
   },
   'PlayerState',
 );
@@ -31,7 +40,7 @@ export const GolfState = schema(
     code: 'string',
     /** lobby | match */
     phase: 'string',
-    /** hole-intro | playing | hole-end | finished (while phase is match). */
+    /** hole-intro | playing | hole-end | results (while phase is match). */
     matchPhase: 'string',
     holeIndex: 'uint8',
     holeCount: 'uint8',

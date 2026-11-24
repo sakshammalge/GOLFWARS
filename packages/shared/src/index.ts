@@ -2,6 +2,8 @@ export * from './protocol.js';
 export * from './physics/config.js';
 export * from './physics/golfSim.js';
 export * from './rules.js';
+export * from './scoring.js';
+export * from './balance.js';
 export * from './character/index.js';
 export * from './net/index.js';
 export * from './match/index.js';

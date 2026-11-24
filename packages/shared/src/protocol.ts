@@ -1,5 +1,5 @@
 /** Bump when client and server can no longer talk to each other. */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Name of the game room. A room's id is its 5-letter room code. */
 export const GOLF_ROOM = 'golf';
@@ -23,8 +23,10 @@ export const MessageType = {
   SetColor: 'color',
   Ready: 'ready',
   Start: 'start',
-  /** c: host sends everyone back to the lobby after the scoreboard. */
+  /** c: host, at the results: `{mode: 'again'}` = new match with the same players, else back to the lobby. */
   Rematch: 'rematch',
+  /** c: any player at the results: `{v: boolean}` = "I want another match" (shown to everyone). */
+  RematchVote: 'rvote',
 } as const;
 
 export interface PingMessage {
@@ -63,7 +65,8 @@ export type LobbyPhase = 'lobby' | 'match';
 export type GameEvent =
   | { k: 'shot'; p: number }
   | { k: 'oob'; p: number }
-  | { k: 'holed'; p: number; s: number }
+  /** `r` = finish order on this hole (1 = first), `b` = the bonus it earns (-2, -1, 0). */
+  | { k: 'holed'; p: number; s: number; r: number; b: number }
   | { k: 'bonk'; a: number; v: number }
   | { k: 'fell'; p: number }
   | { k: 'timeout'; p: number }

@@ -25,6 +25,15 @@ import { MATCH, NET, type MatchConfig } from '../net/config.js';
 import { fromEntry, MAX_FINE_AIM, type InputEntry, type ShotTuple } from '../net/input.js';
 import type { MatchPhase, NetPlayer, Snapshot } from '../net/snapshot.js';
 import type { GameEvent } from '../protocol.js';
+import {
+  createFlow,
+  endHoleFlow,
+  startFlow,
+  stepFlow,
+  type FlowState,
+  type FlowTransition,
+} from './flow.js';
+import { finishBonusFor, finishPlace, scoreHole } from '../scoring.js';
 
 /** One input being applied to a player this tick. */
 export interface TickInput {
@@ -51,15 +60,30 @@ export interface MatchPlayer {
   holed: boolean;
   /** How far (ticks) the current swing's victims are rewound, fixed when the swing starts. */
   lagTicks: number;
+  /** Sim tick at which the ball dropped in the cup on the current hole (null = not yet). */
+  holedTick: number | null;
+  /** Finish order on the current hole (1 = first to hole out, 0 = not holed yet). */
+  finishPlace: number;
+  /** Finish-order bonus of each finished hole (-2, -1 or 0), parallel to `round.results`. */
+  bonuses: number[];
+  /** Placement on each finished hole by points (1 = best, ties share). */
+  places: number[];
 }
 
 export interface ScoreRow {
   slot: number;
   /** Strokes on each finished hole (including the current one once it is over). */
   holes: number[];
+  /** Finish-order bonus of each finished hole. */
+  bonuses: number[];
+  /** Placement on each finished hole. */
+  places: number[];
   /** Strokes on the current hole so far. */
   strokes: number;
   holed: boolean;
+  /** Finish order on the current hole (0 = not holed). */
+  finish: number;
+  /** Total points: strokes + bonuses of the finished holes. */
   total: number;
 }
 
@@ -84,12 +108,10 @@ const FACING_STEP = Math.PI / 4;
  */
 export class MatchSim {
   readonly players = new Map<number, MatchPlayer>();
-  phase: MatchPhase = 'hole-intro';
-  holeIndex = 0;
+  /** The pure state machine (see `flow.ts`); `phase`, `holeIndex` and `timeLeft` read through it. */
+  readonly flow: FlowState;
   /** Sim ticks since the match started (never reset). */
   tickCount = 0;
-  /** Seconds left in the current phase (intro / hole-end), or on the hole timer while playing. */
-  timeLeft = 0;
 
   private world!: World;
   private loaded!: LoadedHole;
@@ -102,6 +124,8 @@ export class MatchSim {
     readonly config: MatchConfig = MATCH,
   ) {
     if (holes.length === 0) throw new Error('a match needs at least one hole');
+    this.flow = createFlow(holes.length);
+    startFlow(this.flow, config);
     const specs = holes.map((h) => ({ id: h.id, name: h.name, par: h.par }));
     for (const slot of slots) {
       this.players.set(slot, {
@@ -115,9 +139,30 @@ export class MatchSim {
         abandoned: false,
         holed: false,
         lagTicks: 0,
+        holedTick: null,
+        finishPlace: 0,
+        bonuses: [],
+        places: [],
       });
     }
-    this.startHole(0);
+    this.startHole();
+  }
+
+  get phase(): MatchPhase {
+    return this.flow.phase as MatchPhase;
+  }
+
+  get holeIndex(): number {
+    return this.flow.holeIndex;
+  }
+
+  /** Seconds left in the current phase (intro / hole-end), or on the hole timer while playing. */
+  get timeLeft(): number {
+    return this.flow.timeLeft;
+  }
+
+  set timeLeft(v: number) {
+    this.flow.timeLeft = v;
   }
 
   get hole(): Hole {
@@ -125,13 +170,12 @@ export class MatchSim {
   }
 
   get finished(): boolean {
-    return this.phase === 'finished';
+    return this.phase === 'results';
   }
 
   // ---------------------------------------------------------------- lifecycle
 
-  private startHole(index: number): void {
-    this.holeIndex = index;
+  private startHole(): void {
     for (const p of this.players.values()) this.releasePlayer(p);
     this.world?.free();
     const cw = createCourseWorld(this.hole);
@@ -148,6 +192,8 @@ export class MatchSim {
 
     for (const p of this.players.values()) {
       p.holed = false;
+      p.holedTick = null;
+      p.finishPlace = 0;
       p.lagTicks = 0;
       if (p.abandoned) {
         p.round = recordTimeout(beginPlay(p.round), this.config.timeoutExtraStrokes);
@@ -160,8 +206,6 @@ export class MatchSim {
       p.windup.respawnNear(p.ball.position(), facing + p.slot * FACING_STEP);
       p.windup.yaw = facing;
     }
-    this.phase = 'hole-intro';
-    this.timeLeft = this.config.introSeconds;
   }
 
   /** A player left for good: scored par + 3 on this hole and all remaining ones. */
@@ -171,8 +215,9 @@ export class MatchSim {
     p.abandoned = true;
     p.connected = false;
     this.releasePlayer(p);
-    if (p.round.phase === 'playing') {
-      p.round = recordTimeout(p.round, this.config.timeoutExtraStrokes);
+    // Mid-intro or mid-hole: this hole scores par + 3 at once (a hole already holed keeps its strokes).
+    if (p.round.phase === 'hole-intro' || p.round.phase === 'playing') {
+      p.round = recordTimeout(beginPlay(p.round), this.config.timeoutExtraStrokes);
     }
   }
 
@@ -215,6 +260,7 @@ export class MatchSim {
 
     for (const p of live) p.ball!.prepare();
     this.world.step();
+    const holedNow: MatchPlayer[] = [];
     for (const p of live) {
       const ev = p.ball!.afterStep();
       if (ev.outOfBounds && p.round.phase === 'playing') {
@@ -224,7 +270,22 @@ export class MatchSim {
       if (ev.holed && p.round.phase === 'playing') {
         p.round = recordHoled(p.round);
         p.holed = true;
-        events.push({ k: 'holed', p: p.slot, s: p.round.results.at(-1)!.strokes });
+        p.holedTick = this.tickCount;
+        holedNow.push(p);
+      }
+    }
+    // Finish order: players holing out on the same tick tie for the better place.
+    if (holedNow.length > 0) {
+      const ticks = [...this.players.values()].map((q) => q.holedTick);
+      for (const p of holedNow) {
+        p.finishPlace = finishPlace(p.holedTick!, ticks);
+        events.push({
+          k: 'holed',
+          p: p.slot,
+          s: p.round.results.at(-1)!.strokes,
+          r: p.finishPlace,
+          b: finishBonusFor(p.finishPlace),
+        });
       }
     }
     this.checkHoleEnd(events);
@@ -232,46 +293,59 @@ export class MatchSim {
   }
 
   private stepClock(events: GameEvent[]): void {
-    if (this.phase === 'finished') return;
+    if (this.flow.phase === 'results') return;
     // Frozen while nobody is connected (everyone dropped; waiting for reconnects).
     if (![...this.players.values()].some((p) => p.connected && !p.abandoned)) return;
-    this.timeLeft -= STEP_DT;
-    if (this.phase === 'hole-intro' && this.timeLeft <= 0) {
-      this.phase = 'playing';
-      this.timeLeft = this.config.holeTimeSeconds;
-      for (const p of this.players.values()) if (!p.abandoned) p.round = beginPlay(p.round);
-    } else if (this.phase === 'playing' && this.timeLeft <= 0) {
-      this.endHole(events, true);
-    } else if (this.phase === 'hole-end' && this.timeLeft <= 0) {
-      this.nextHole(events);
+    this.handle(stepFlow(this.flow, STEP_DT, this.config, false), events);
+  }
+
+  private handle(t: FlowTransition | null, events: GameEvent[]): void {
+    if (!t) return;
+    switch (t.kind) {
+      case 'play':
+        for (const p of this.players.values()) if (!p.abandoned) p.round = beginPlay(p.round);
+        break;
+      case 'hole-over':
+        this.finishHole(events, t.timedOut);
+        break;
+      case 'next-hole':
+        for (const p of this.players.values()) p.round = advance(p.round);
+        this.startHole();
+        events.push({ k: 'hole', i: t.holeIndex });
+        break;
+      case 'results':
+        for (const p of this.players.values()) p.round = advance(p.round);
+        break;
     }
   }
 
   private checkHoleEnd(events: GameEvent[]): void {
     if (this.phase !== 'playing') return;
     const active = [...this.players.values()].filter((p) => !p.abandoned && p.connected);
-    if (active.length > 0 && active.every((p) => p.holed)) this.endHole(events, false);
+    if (active.length > 0 && active.every((p) => p.holed)) {
+      this.handle(endHoleFlow(this.flow, this.config, false), events);
+    }
   }
 
-  private endHole(events: GameEvent[], timedOut: boolean): void {
+  /** The hole is over: unfinished players score par + 3, then the hole is scored for everyone. */
+  private finishHole(events: GameEvent[], timedOut: boolean): void {
     for (const p of this.players.values()) {
       if (p.round.phase !== 'playing') continue;
       p.round = recordTimeout(p.round, this.config.timeoutExtraStrokes);
       if (timedOut) events.push({ k: 'timeout', p: p.slot });
     }
-    this.phase = 'hole-end';
-    this.timeLeft = this.config.holeEndSeconds;
-  }
-
-  private nextHole(events: GameEvent[]): void {
-    for (const p of this.players.values()) p.round = advance(p.round);
-    if (this.holeIndex + 1 >= this.holes.length) {
-      this.phase = 'finished';
-      this.timeLeft = 0;
-      return;
+    const scores = scoreHole(
+      [...this.players.values()].map((p) => ({
+        slot: p.slot,
+        strokes: p.round.results.at(-1)?.strokes ?? 0,
+        holedTick: p.holedTick,
+      })),
+    );
+    for (const sc of scores) {
+      const p = this.players.get(sc.slot)!;
+      p.bonuses.push(sc.bonus);
+      p.places.push(sc.place);
     }
-    this.startHole(this.holeIndex + 1);
-    events.push({ k: 'hole', i: this.holeIndex });
   }
 
   // ------------------------------------------------------------------- inputs
@@ -355,12 +429,16 @@ export class MatchSim {
             ? p.round.results.filter((_, i) => i < this.holeIndex)
             : [...p.round.results];
         const holes = done.map((r) => r.strokes);
+        const bonuses = p.bonuses.slice(0, holes.length);
         return {
           slot: p.slot,
           holes,
+          bonuses,
+          places: p.places.slice(0, holes.length),
           strokes: this.strokesThisHole(p),
           holed: p.holed,
-          total: holes.reduce((n, s) => n + s, 0),
+          finish: p.finishPlace,
+          total: holes.reduce((n, s, i) => n + s + (bonuses[i] ?? 0), 0),
         };
       });
   }

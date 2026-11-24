@@ -1,10 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { matchMaker } from '@colyseus/core';
-import {
-  MATCH,
-  MessageType,
-  NO_INPUT,
-} from '@golfwars/shared';
+import { MATCH, MessageType, NO_INPUT } from '@golfwars/shared';
 import { KITCHEN_TABLE } from '@golfwars/courses';
 import { createGameServer, type GameServer } from '../src/server.js';
 import type { GolfRoom } from '../src/GolfRoom.js';

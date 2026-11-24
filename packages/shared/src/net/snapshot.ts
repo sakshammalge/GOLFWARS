@@ -5,7 +5,7 @@ import type { BallPhase, Vec3 } from '../physics/golfSim.js';
 import { NET } from './config.js';
 
 /** Where the match is, as carried in every snapshot. */
-export const MATCH_PHASES = ['hole-intro', 'playing', 'hole-end', 'finished'] as const;
+export const MATCH_PHASES = ['hole-intro', 'playing', 'hole-end', 'results'] as const;
 export type MatchPhase = (typeof MATCH_PHASES)[number];
 
 const STATUSES: readonly WindupStatus[] = ['idle', 'run', 'swing', 'topple', 'frozen'];

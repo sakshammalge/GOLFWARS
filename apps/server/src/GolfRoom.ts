@@ -7,6 +7,7 @@ import {
   MatchSim,
   MessageType,
   NET,
+  rematchTarget,
   PLAYER_COLORS,
   PROTOCOL_VERSION,
   SnapshotEncoder,
@@ -124,14 +125,17 @@ export class GolfRoom extends Room<GolfState> {
     this.onMessage(MessageType.Start, (client) => {
       if (client.sessionId === this.state.hostId && this.state.phase === 'lobby') this.startMatch();
     });
-    this.onMessage(MessageType.Rematch, (client) => {
-      if (
-        client.sessionId === this.state.hostId &&
-        this.state.phase === 'match' &&
-        this.sim?.phase === 'finished'
-      ) {
-        this.backToLobby();
+    this.onMessage(MessageType.Rematch, (client, msg: { mode?: unknown } | undefined) => {
+      if (client.sessionId !== this.state.hostId || this.state.phase !== 'match' || !this.sim) {
+        return;
       }
+      const target = rematchTarget(this.sim.phase, msg?.mode);
+      if (target === 'restart') this.restartMatch();
+      else if (target === 'lobby') this.backToLobby();
+    });
+    this.onMessage(MessageType.RematchVote, (client, msg: { v?: unknown } | undefined) => {
+      const p = this.player(client);
+      if (p && !p.abandoned && this.sim?.phase === 'results') p.vote = msg?.v === true;
     });
     this.onMessage(MessageType.Input, (client, raw: unknown) => this.onInput(client, raw));
     // Test hook for the local browser e2e: only exists when the server is started with
@@ -272,14 +276,7 @@ export class GolfRoom extends Room<GolfState> {
     this.state.phase = 'match';
     this.state.matchPhase = this.sim.phase;
     this.state.holeIndex = 0;
-    this.state.players.forEach((p) => {
-      p.ready = false;
-      p.strokes = 0;
-      p.holed = false;
-      p.total = 0;
-      p.abandoned = false;
-      p.scores.splice(0, p.scores.length);
-    });
+    this.resetScores();
     this.seats.forEach((s) => s.encoder.reset());
     void this.lock();
     this.acc = 0;
@@ -288,26 +285,48 @@ export class GolfRoom extends Room<GolfState> {
     this.syncScores(true);
   }
 
-  private backToLobby(): void {
-    this.sim?.dispose();
-    this.sim = null;
-    // Players who left for good during the match lose their seat now.
-    for (const [id, p] of [...this.state.players.entries()]) {
-      if (p.abandoned) {
-        this.state.players.delete(id);
-        this.joinOrder = this.joinOrder.filter((j) => j !== id);
-      }
-    }
-    this.state.phase = 'lobby';
-    this.state.matchPhase = 'hole-intro';
+  private resetScores(): void {
     this.state.players.forEach((p) => {
       p.ready = false;
       p.strokes = 0;
       p.holed = false;
+      p.finish = 0;
       p.total = 0;
+      p.vote = false;
+      p.abandoned = false;
       p.scores.splice(0, p.scores.length);
+      p.bonus.splice(0, p.bonus.length);
+      p.places.splice(0, p.places.length);
     });
+  }
+
+  /** Players who left for good during the match lose their seat. */
+  private dropAbandoned(): void {
+    for (const [id, p] of [...this.state.players.entries()]) {
+      if (p.abandoned) {
+        this.state.players.delete(id);
+        this.joinOrder = this.joinOrder.filter((j) => j !== id);
+        this.seats.delete(id);
+      }
+    }
     this.updateHost();
+  }
+
+  /** "Play again" at the results: a fresh match with the same players, no lobby in between. */
+  private restartMatch(): void {
+    this.sim?.dispose();
+    this.sim = null;
+    this.dropAbandoned();
+    this.startMatch();
+  }
+
+  private backToLobby(): void {
+    this.sim?.dispose();
+    this.sim = null;
+    this.dropAbandoned();
+    this.state.phase = 'lobby';
+    this.state.matchPhase = 'hole-intro';
+    this.resetScores();
     void this.unlock();
   }
 
@@ -386,11 +405,14 @@ export class GolfRoom extends Room<GolfState> {
       if (!r) return;
       p.strokes = Math.min(255, r.strokes);
       p.holed = r.holed;
+      p.finish = r.finish;
       p.total = r.total;
-      if (p.scores.length !== r.holes.length || r.holes.some((s, i) => p.scores[i] !== s)) {
-        p.scores.splice(0, p.scores.length);
-        for (const s of r.holes) p.scores.push(Math.min(255, s));
-      }
+      syncArray(
+        p.scores,
+        r.holes.map((s) => Math.min(255, s)),
+      );
+      syncArray(p.bonus, r.bonuses);
+      syncArray(p.places, r.places);
     });
   }
 
@@ -405,6 +427,21 @@ export class GolfRoom extends Room<GolfState> {
     const s = this.seats.get(sessionId);
     return s && { snapshots: s.snapshots, snapshotBytes: s.snapshotBytes };
   }
+}
+
+/** Rewrites a schema array only if its content differs (avoids needless patches). */
+function syncArray(
+  target: {
+    length: number;
+    [i: number]: number;
+    splice: (a: number, b: number) => unknown;
+    push: (...v: number[]) => unknown;
+  },
+  values: number[],
+): void {
+  if (target.length === values.length && values.every((v, i) => target[i] === v)) return;
+  target.splice(0, target.length);
+  for (const v of values) target.push(v);
 }
 
 export { GOLF_ROOM };
