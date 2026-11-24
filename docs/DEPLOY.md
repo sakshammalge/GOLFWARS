@@ -10,6 +10,8 @@ Nothing is deployed yet. This is the setup for when the owner is ready. Everythi
 2. New > Blueprint, pick `sakshammalge/golfwars`. Render reads `render.yaml` and creates `golfwars-server`.
 3. After the first deploy, check `https://<service>.onrender.com/health`. It should return `{"ok":true,"protocol":1}`.
 
+The server is one Node process (Colyseus `golf` rooms, room codes are unique per process): keep it at a single instance. It listens on `PORT` and `/health` is unchanged, so `render.yaml` needs no changes for M3. Never set `GOLFWARS_CHEATS` in production (it enables a hole-out test hook used only by the local e2e).
+
 The free plan spins down after inactivity; the first connection after a pause takes about 30-60 seconds.
 The WebSocket URL is `wss://<service>.onrender.com`.
 
@@ -34,4 +36,4 @@ Build settings (if you connect the repo in the Cloudflare dashboard instead of u
 
 ## Local development
 
-`pnpm dev` runs the server on `:2567` and the client on `http://localhost:5173`. The client uses `ws://localhost:2567` unless `VITE_SERVER_URL` is set (see `apps/client/.env.example`).
+`pnpm dev` runs the server on `:2567` and the client on `http://localhost:5173` (listening on all interfaces for LAN play). The client connects to `ws://<page host>:2567` unless `VITE_SERVER_URL` is set (see `apps/client/.env.example`). Production builds on Cloudflare Pages must set `VITE_SERVER_URL`, because the page host there is not the game server.
