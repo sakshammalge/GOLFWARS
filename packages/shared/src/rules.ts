@@ -63,6 +63,17 @@ export function recordHoled(s: RoundState): RoundState {
   return { ...s, phase: 'hole-end', results: [...s.results, result] };
 }
 
+/**
+ * The hole timer ran out (or the player left): an unfinished hole counts as par + `extra` strokes,
+ * or the strokes already taken if that is more. Ignored unless the hole is in play.
+ */
+export function recordTimeout(s: RoundState, extra = 3): RoundState {
+  if (s.phase !== 'playing') return s;
+  const hole = currentHole(s);
+  const result: HoleResult = { ...hole, strokes: Math.max(s.strokes, hole.par + extra) };
+  return { ...s, strokes: result.strokes, phase: 'hole-end', results: [...s.results, result] };
+}
+
 /** Hole-end banner is done: move to the next hole's intro, or finish the round. */
 export function advance(s: RoundState): RoundState {
   if (s.phase !== 'hole-end') return s;

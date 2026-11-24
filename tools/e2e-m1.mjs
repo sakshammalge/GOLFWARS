@@ -43,6 +43,7 @@ const waitBanner = (re) =>
 
 try {
   await page.goto(`${base}/?cheats`);
+  await page.click('#play-solo'); // M3: the menu comes first; solo offline keeps the old game
   await page.waitForSelector('#hud-banner:not([hidden])');
   assert(/Hole 1 . Straight Shot . Par 2/.test(await text('#hud-banner')), 'hole 1 intro banner');
   await page.waitForTimeout(500);
@@ -51,7 +52,6 @@ try {
   await page.waitForTimeout(800);
   await shot('hole1-start');
   assert(/Strokes 0/.test(await text('#hud-strokes')), 'stroke counter starts at 0');
-  assert(/disconnected|connecting|connected/.test(await text('#status')), 'server label present');
 
   // Charge a shot: mouse down, wait, screenshot with meter and arc, release.
   await page.mouse.move(640, 300);

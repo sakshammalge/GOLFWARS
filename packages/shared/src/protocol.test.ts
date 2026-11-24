@@ -12,6 +12,11 @@ describe('protocol', () => {
     expect(MessageType.Pong).toBe('pong');
   });
 
+  it('uses distinct message names', () => {
+    const names = Object.values(MessageType);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
   it('computes non-negative round trip time', () => {
     expect(roundTripMs(100, 142.4)).toBe(42);
     expect(roundTripMs(200, 100)).toBe(0);

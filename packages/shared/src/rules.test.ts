@@ -10,6 +10,7 @@ import {
   recordHoled,
   recordPenalty,
   recordStroke,
+  recordTimeout,
   restartRound,
   scoreName,
   scorecard,
@@ -121,5 +122,28 @@ describe('text helpers', () => {
     expect(holeEndText({ id: 'x', name: 'X', par: 3, strokes: 2 })).toBe(
       'Birdie! – 2 strokes (par 3)',
     );
+  });
+});
+
+describe('recordTimeout', () => {
+  const holes = [
+    { id: 'a', name: 'A', par: 3 },
+    { id: 'b', name: 'B', par: 4 },
+  ];
+  it('scores par + 3 for an unfinished hole', () => {
+    let s = beginPlay(createRound(holes));
+    s = recordStroke(s);
+    s = recordTimeout(s);
+    expect(s.phase).toBe('hole-end');
+    expect(s.results[0]?.strokes).toBe(6);
+  });
+  it('keeps strokes already taken when they exceed par + 3', () => {
+    let s = beginPlay(createRound(holes));
+    for (let i = 0; i < 8; i++) s = recordStroke(s);
+    expect(recordTimeout(s).results[0]?.strokes).toBe(8);
+  });
+  it('is ignored when the hole is not in play', () => {
+    const s = createRound(holes);
+    expect(recordTimeout(s)).toBe(s);
   });
 });

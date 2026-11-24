@@ -59,6 +59,10 @@ export class Hud {
     document.body.appendChild(this.root);
   }
 
+  setVisible(visible: boolean): void {
+    this.root.style.display = visible ? '' : 'none';
+  }
+
   setStrokes(text: string): void {
     this.strokes.textContent = text;
   }
