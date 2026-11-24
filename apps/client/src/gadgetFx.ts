@@ -12,13 +12,7 @@ import {
   Vector3,
   type Object3D,
 } from 'three';
-import {
-  BALANCE,
-  PHYSICS,
-  STEP_DT,
-  type NetEffect,
-  type RenderPlayer,
-} from '@golfwars/shared';
+import { BALANCE, PHYSICS, STEP_DT, type NetEffect, type RenderPlayer } from '@golfwars/shared';
 
 /** Everything the effects need to draw one frame. */
 export interface FxFrame {

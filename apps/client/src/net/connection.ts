@@ -10,10 +10,12 @@ import {
   SnapshotBuffer,
   SnapshotClock,
   SnapshotDecoder,
+  setBalanceOverride,
   type GameEvent,
   type InputPacket,
   type JoinOptions,
   type LagConfig,
+  type OverrideResult,
   type PongMessage,
   type Snapshot,
 } from '@golfwars/shared';
@@ -84,6 +86,8 @@ export class Connection {
   /** The connection ended for good (left, kicked, or reconnecting failed). */
   onClosed: (reason: string) => void = () => {};
   onConnState: (s: ConnState) => void = () => {};
+  /** A dev server hot-reloaded its balance file and this client applied it. */
+  onBalance: (r: OverrideResult) => void = () => {};
 
   private pingTimer = 0;
   private snapTimes: number[] = [];
@@ -173,6 +177,12 @@ export class Connection {
     });
     room.onMessage(MessageType.Event, (events: GameEvent[]) => {
       this.lag.schedule('in', () => this.onEvents(events));
+    });
+    room.onMessage(MessageType.Balance, (msg: { o?: unknown }) => {
+      // Dev only: the server's balance.dev.json, so predicted physics and gadget visuals match it.
+      const r = setBalanceOverride(msg?.o ?? {});
+      console.info('[balance] override applied', r.applied.length, 'values');
+      this.onBalance(r);
     });
     room.onMessage(MessageType.Pong, (msg: PongMessage) => {
       this.lag.schedule('in', () => {

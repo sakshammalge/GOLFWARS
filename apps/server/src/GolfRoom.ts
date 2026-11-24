@@ -26,6 +26,7 @@ import {
   type PongMessage,
   type TickInput,
 } from '@golfwars/shared';
+import type { BalanceWatcher } from './balanceWatcher.js';
 import { GolfState, PlayerState } from './state.js';
 
 export interface GolfRoomConfig {
@@ -35,6 +36,8 @@ export interface GolfRoomConfig {
   reconnectSeconds: number;
   /** Fixes the crate RNG (tests); by default every match gets a random seed. */
   seed?: number;
+  /** Dev only: hot-reloadable balance override (see `balanceWatcher.ts`). */
+  balance?: BalanceWatcher;
 }
 
 export const DEFAULT_ROOM_CONFIG: GolfRoomConfig = {
@@ -81,6 +84,7 @@ export class GolfRoom extends Room<GolfState> {
   private lastPump = 0;
   private acc = 0;
   private lastScoreKey = '';
+  private stopBalanceWatch: (() => void) | null = null;
 
   /** A room class with a custom config (tests use short intros and holes). */
   static withConfig(config: Partial<GolfRoomConfig>): typeof GolfRoom {
@@ -170,6 +174,10 @@ export class GolfRoom extends Room<GolfState> {
       });
     }
 
+    // Dev balance hot reload: tell every client of this room when the override changes.
+    const off = this.config.balance?.onChange((o) => this.broadcast(MessageType.Balance, { o }));
+    if (off) this.stopBalanceWatch = off;
+
     this.lastPump = performance.now();
     this.setSimulationInterval(() => this.pump(), 8);
   }
@@ -190,6 +198,8 @@ export class GolfRoom extends Room<GolfState> {
     p.connected = true;
     this.state.players.set(client.sessionId, p);
     this.joinOrder.push(client.sessionId);
+    const override = this.config.balance?.current();
+    if (override) client.send(MessageType.Balance, { o: override });
     this.seats.set(client.sessionId, {
       slot,
       input: new InputBuffer(),
@@ -228,6 +238,7 @@ export class GolfRoom extends Room<GolfState> {
   }
 
   override onDispose(): void {
+    this.stopBalanceWatch?.();
     usedCodes.delete(this.roomId);
     this.sim?.dispose();
     this.sim = null;

@@ -20,6 +20,8 @@ export const MessageType = {
   Snapshot: 'S',
   /** s: discrete game events (shots, bonks, holed, ...). */
   Event: 'ev',
+  /** s: dev only. The balance override in force (`{o: object | null}`); clients apply it. */
+  Balance: 'balance',
   /** c: lobby actions. */
   SetNick: 'nick',
   SetColor: 'color',

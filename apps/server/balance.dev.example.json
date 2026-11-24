@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy to balance.dev.json (gitignored). In dev the server watches that file and applies it to running rooms at once; clients are told too. Any number in packages/shared/src/balance.ts can go here, same nesting. Unknown keys are ignored (and logged). Production ignores the file.",
+  "match": { "holeTimeSeconds": 60 },
+  "scoring": { "finishBonus": [-3, -1] },
+  "gadgets": {
+    "bubble": { "trapSeconds": 6, "speed": 7 },
+    "fan": { "duration": 3, "ballAccel": 14 },
+    "magnet": { "pullAccel": 6 }
+  },
+  "crate": { "respawnSeconds": 10 },
+  "windup": { "walkSpeed": 5 }
+}

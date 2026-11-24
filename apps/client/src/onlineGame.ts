@@ -209,6 +209,7 @@ export class OnlineGame {
     this.conn = conn;
     conn.onSnapshot = (s) => this.onSnapshot(s);
     conn.onEvents = (e) => this.onEvents(e);
+    conn.onBalance = (r) => this.hud.showToast(`Balance reloaded (${r.applied.length} values)`);
   }
 
   // ------------------------------------------------------------- lifecycle
