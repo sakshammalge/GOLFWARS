@@ -2,6 +2,7 @@ import { KITCHEN_TABLE } from '@golfwars/courses';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initPhysics } from '../physics/golfSim.js';
 import { MATCH, type MatchConfig } from '../net/config.js';
+import { BALANCE } from '../balance.js';
 import { toEntry } from '../net/input.js';
 import { NO_INPUT, type WindupInput } from '../character/index.js';
 import { MatchSim, type TickInput } from './matchSim.js';
@@ -148,5 +149,108 @@ describe('crates and gadget use in a match', () => {
     expect(m.gadgets.heldBy(0)).toBeNull();
     expect(m.snapshotFor(0).crates).toBe(0b111);
     m.dispose();
+  });
+});
+
+describe('gadget effects inside a match', () => {
+  /** A playing 2-player match with both Windups and A's gadget ready. */
+  function setup(g: 'bubble' | 'gum' | 'fan' | 'magnet') {
+    const m = playing([0, 1]);
+    m.grantGadget(0, g);
+    run(m, 40); // cooldown
+    return m;
+  }
+  const useNow = (m: MatchSim) =>
+    run(m, 1, (s) => (s === 0 ? [inp({ ...NO_INPUT, gadget: true })] : []));
+
+  it("Bubble: A fires it, it shows up in snapshots, and B's ball ends up trapped and unhittable", () => {
+    const m = setup('bubble');
+    const w = m.windupOf(0)!;
+    w.setPosition([0, 0, 4]);
+    w.yaw = 0;
+    m.ballOf(1)!.teleport([0, 0.152, -1]);
+    const ev = useNow(m);
+    expect(ev).toContainEqual({ k: 'use', p: 0, g: 'bubble' });
+    expect(m.snapshotFor(1).effects.map((e) => e.kind)).toEqual(['bubble']);
+    const trapEvents = run(m, 90).filter((e) => e.k === 'trap');
+    expect(trapEvents).toContainEqual({ k: 'trap', p: 1, a: 0 });
+    expect(m.snapshotFor(0).players.find((p) => p.slot === 1)!.ball.phase).toBe('trapped');
+    expect(m.snapshotFor(0).effects).toHaveLength(0);
+    // B stands next to its trapped ball and tries to hit it: refused, no stroke.
+    m.windupOf(1)!.setPosition([0.5, 0, -1]);
+    run(m, 2);
+    run(m, 1, (s) =>
+      s === 1 ? [{ seq: ++seq, viewTick: 1e9, entry: toEntry(NO_INPUT, [0, 0, 0.5]) }] : [],
+    );
+    expect(m.players.get(1)!.round.strokes).toBe(0);
+    m.dispose();
+  });
+
+  it("Gum: the patch is placed in front of A, slows B's Windup to 40% and stops B's ball", () => {
+    const m = setup('gum');
+    const a = m.windupOf(0)!;
+    a.setPosition([0, 0, 3]);
+    a.yaw = 0;
+    useNow(m);
+    const patch = m.snapshotFor(1).effects[0]!;
+    expect(patch.kind).toBe('gum');
+    expect(patch.pos[2]).toBeCloseTo(3 - BALANCE.gadgets.gum.placeDistance, 1);
+    // B's Windup walks through it at 40% speed.
+    const b = m.windupOf(1)!;
+    b.setPosition([0, 0, patch.pos[2] + 0.9]);
+    const z0 = b.position()[2];
+    run(m, 15, (s) => (s === 1 ? [inp({ ...NO_INPUT, moveZ: 1 })] : []));
+    const slowed = z0 - b.position()[2];
+    b.setPosition([0, 0, -4.5]);
+    const z1 = b.position()[2];
+    run(m, 15, (s) => (s === 1 ? [inp({ ...NO_INPUT, moveZ: 1 })] : []));
+    const free = z1 - b.position()[2];
+    expect(slowed / free).toBeLessThan(0.6);
+    // B's ball rolls into it and stops dead.
+    const ball = m.ballOf(1)!;
+    ball.teleport([0, 0.152, patch.pos[2] + 2.5]);
+    b.setPosition([1, 0, patch.pos[2] + 2.5]);
+    expect(ball.shoot(0, 0.7)).toBe(true);
+    const ev = run(m, 90);
+    expect(ev).toContainEqual({ k: 'stick', p: 1 });
+    expect(ball.state).toBe('resting');
+    m.dispose();
+  });
+
+  it("Fan: B's Windup in the cone is pushed away without any input, A's is not; B's ball is blown", () => {
+    const m = setup('fan');
+    const a = m.windupOf(0)!;
+    a.setPosition([0, 0, 5]);
+    a.yaw = 0;
+    const b = m.windupOf(1)!;
+    b.setPosition([0, 0, 3]);
+    m.ballOf(1)!.teleport([0.3, 0.152, 2.4]);
+    useNow(m);
+    expect(m.snapshotFor(1).effects.map((e) => e.kind)).toEqual(['fan']);
+    run(m, 90, () => [inp()]); // a Windup only moves on ticks where its client sent an input
+    expect(b.position()[2]).toBeLessThan(3 - 1.2);
+    expect(a.position()[2]).toBeCloseTo(5, 2);
+    expect(m.ballOf(1)!.position()[2]).toBeLessThan(2.4 - 0.5);
+    run(m, 40);
+    expect(m.snapshotFor(1).effects).toHaveLength(0); // the 2 s are over
+    m.dispose();
+  });
+
+  it("Magnet: shows for 5 s and bends B's moving ball towards A's ball", () => {
+    const run2 = (withMagnet: boolean): number => {
+      const m = setup('magnet');
+      m.ballOf(0)!.teleport([0, 0.152, -3.5]);
+      m.ballOf(1)!.teleport([1, 0.152, 1]);
+      if (withMagnet) {
+        useNow(m);
+        expect(m.snapshotFor(1).effects.map((e) => e.kind)).toEqual(['magnet']);
+      }
+      m.ballOf(1)!.shoot(0, 0.3);
+      run(m, 70);
+      const x = m.ballOf(1)!.position()[0];
+      m.dispose();
+      return x;
+    };
+    expect(run2(true)).toBeLessThan(run2(false) - 0.05);
   });
 });

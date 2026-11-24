@@ -76,4 +76,8 @@ export type GameEvent =
   /** `p` walked into a crate and got gadget `g`. */
   | { k: 'pickup'; p: number; g: GadgetType }
   /** `p` used gadget `g`. */
-  | { k: 'use'; p: number; g: GadgetType };
+  | { k: 'use'; p: number; g: GadgetType }
+  /** A bubble trapped `p`'s ball (the bubble was fired by `a`). */
+  | { k: 'trap'; p: number; a: number }
+  /** `p`'s ball stuck in gum. */
+  | { k: 'stick'; p: number };

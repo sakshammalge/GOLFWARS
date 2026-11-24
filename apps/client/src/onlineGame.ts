@@ -15,6 +15,9 @@ import { KITCHEN_TABLE, KITCHEN_TABLE_NAME, type Hole } from '@golfwars/courses'
 import {
   GADGET_INFO,
   GolfSim,
+  NO_ENV,
+  gumScaleAt,
+  type WindupEnv,
   NET,
   NO_INPUT,
   PHYSICS,
@@ -44,6 +47,7 @@ import {
 import { AimPreview } from './aimPreview.js';
 import { buildHoleMeshes, type HoleGroup } from './courseMeshes.js';
 import { animateCrate } from './gadgetMeshes.js';
+import { GadgetFx } from './gadgetFx.js';
 import { Hud } from './hud.js';
 import type { Connection } from './net/connection.js';
 import type { Stage } from './scene.js';
@@ -140,6 +144,7 @@ export class OnlineGame {
       side: DoubleSide,
     }),
   );
+  private readonly fx = new GadgetFx();
   private readonly smoother = new VisualSmoother();
   private readonly remotes = new Map<number, RemoteActor>();
   private courseGroup: HoleGroup | null = null;
@@ -182,7 +187,7 @@ export class OnlineGame {
   ) {
     this.table.receiveShadow = true;
     this.ring.rotation.x = -Math.PI / 2;
-    this.sceneGroup.add(this.table, this.ring, this.aim.object);
+    this.sceneGroup.add(this.table, this.ring, this.aim.object, this.fx.group);
     this.stage.scene.add(this.sceneGroup);
     this.stage.rig.onRightClick = () => (this.swingQueued = this.active);
     window.addEventListener('keydown', (e) => {
@@ -236,6 +241,7 @@ export class OnlineGame {
     this.results.hide();
     this.plates.clear();
     this.disposeHole();
+    this.fx.clear();
     for (const r of this.remotes.values()) r.dispose();
     this.remotes.clear();
     this.controls.setEnabled(false);
@@ -274,7 +280,7 @@ export class OnlineGame {
     const windup = new Windup(this.slot, this.course.world, this.course.loaded, [0, 0, 0]);
     // Sequence numbers must keep counting across holes (the server drops old ones).
     if (this.predictor) this.predictor.replaceWindup(windup);
-    else this.predictor = new Predictor(windup);
+    else this.predictor = new Predictor(windup, (w) => this.windupEnv(w));
     this.windupLive = true;
     this.ownModel = new WindupModel(colorHex(this.myColor()));
     this.sceneGroup.add(this.ownModel.group);
@@ -616,6 +622,13 @@ export class OnlineGame {
       if (c.visible) animateCrate(c, this.crateBase(i), now / 1000, i * 1.7);
     });
     this.hud.setGadget(this.latest?.gadget ?? null);
+    this.fx.update({
+      effects: this.conn.buffer.sampleEffects(renderTick),
+      players: rps,
+      renderTick,
+      time: now / 1000,
+      dt,
+    });
 
     const canShoot = this.canShoot();
     this.controls.setEnabled(canShoot);
@@ -647,6 +660,17 @@ export class OnlineGame {
     }
 
     this.updateDebug(dt, now, w);
+  }
+
+  /**
+   * Gadget influence on the own Windup, as far as the client can know it: gum patches are static
+   * and in every snapshot, so slowing is predicted exactly. A Desk Fan's wind is not predicted
+   * (its timing depends on the server tick): the server's push shows up as a smoothed correction.
+   */
+  private windupEnv(w: Windup): WindupEnv {
+    const patches = this.latest?.effects.filter((e) => e.kind === 'gum');
+    if (!patches || patches.length === 0) return NO_ENV;
+    return { speedScale: gumScaleAt(patches, w.position()), drift: [0, 0] };
   }
 
   private crateBase(i: number): number {

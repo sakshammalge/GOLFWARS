@@ -23,11 +23,10 @@ afterAll(async () => {
   await server.stop();
 });
 
-export const roomOf = (c: TestClient): GolfRoom =>
-  matchMaker.getLocalRoomById(c.room.roomId) as GolfRoom;
+const roomOf = (c: TestClient): GolfRoom => matchMaker.getLocalRoomById(c.room.roomId) as GolfRoom;
 
 /** Starts a 2-player match and waits for the playing phase. */
-export async function startTwo(): Promise<[TestClient, TestClient, GolfRoom]> {
+async function startTwo(): Promise<[TestClient, TestClient, GolfRoom]> {
   const a = await TestClient.create(url, { nickname: 'Ada' });
   const b = await TestClient.join(url, a.room.roomId, { nickname: 'Bob' });
   await waitFor(() => a.state.players.size === 2, 'two players');
@@ -73,6 +72,90 @@ describe('crates and the gadget slot over the network (T4.3)', () => {
     await waitFor(() => a.events.some((e) => e.k === 'use'), 'use event');
     expect(b.events).toContainEqual({ k: 'use', p: a.me.slot, g });
     await waitFor(() => a.latest!.gadget === null, 'slot empty');
+    await a.close();
+    await b.close();
+  });
+});
+
+describe('gadget effects reach the other player in snapshots (T4.4)', () => {
+  /** A holds `g`, stands at `feet` facing -z, and presses Q. Returns once the use event arrived. */
+  async function fire(
+    a: TestClient,
+    room: GolfRoom,
+    g: GadgetType,
+    feet: [number, number, number] = [0, 0, 4],
+  ): Promise<void> {
+    const sim = room.matchSim!;
+    const w = sim.windupOf(a.me.slot)!;
+    w.setPosition(feet);
+    w.yaw = 0;
+    sim.grantGadget(a.me.slot, g);
+    await sleep(700); // use cooldown
+    a.sendInput({ ...NO_INPUT, gadget: true });
+    await waitFor(() => a.events.some((e) => e.k === 'use' && e.g === g), `${g} used`);
+  }
+
+  it('Bubble Wand: B sees the bubble fly and its own ball end up trapped', async () => {
+    const [a, b, room] = await startTwo();
+    room.matchSim!.ballOf(b.me.slot)!.teleport([0, 0.152, -1]);
+    await fire(a, room, 'bubble');
+    await waitFor(
+      () =>
+        b.snaps.some((s) => s.effects.some((e) => e.kind === 'bubble' && e.owner === a.me.slot)),
+      'bubble in B snapshots',
+    );
+    await waitFor(
+      () => b.latest!.players.find((p) => p.slot === b.me.slot)!.ball.phase === 'trapped',
+      'B ball trapped',
+    );
+    expect(b.events).toContainEqual({ k: 'trap', p: b.me.slot, a: a.me.slot });
+    // B cannot hit its trapped ball.
+    b.sendInput(NO_INPUT, [0, 0, 0.5]);
+    await sleep(200);
+    expect(b.me.strokes).toBe(0);
+    await a.close();
+    await b.close();
+  });
+
+  it("Gum Blob: B sees the patch (owner A) and B's ball sticks in it", async () => {
+    const [a, b, room] = await startTwo();
+    await fire(a, room, 'gum', [0, 0, 3]);
+    await waitFor(
+      () => b.latest!.effects.some((e) => e.kind === 'gum' && e.owner === a.me.slot),
+      'gum in B snapshots',
+    );
+    const patch = b.latest!.effects.find((e) => e.kind === 'gum')!;
+    expect(patch.pos[2]).toBeCloseTo(3 - 1.6, 1);
+    const ball = room.matchSim!.ballOf(b.me.slot)!;
+    ball.teleport([0, 0.152, patch.pos[2] + 2.5]);
+    expect(ball.shoot(0, 0.7)).toBe(true);
+    await waitFor(() => b.events.some((e) => e.k === 'stick' && e.p === b.me.slot), 'stick event');
+    await a.close();
+    await b.close();
+  });
+
+  it("Desk Fan: B, standing still in the cone, is pushed away; the effect is in B's snapshots", async () => {
+    const [a, b, room] = await startTwo();
+    room.matchSim!.windupOf(b.me.slot)!.setPosition([0, 0, 2.5]);
+    await b.hold(NO_INPUT, 6);
+    await fire(a, room, 'fan', [0, 0, 5]);
+    // B keeps sending (idle) inputs: the wind moves it anyway.
+    await b.hold(NO_INPUT, 90);
+    expect(
+      b.snaps.some((s) => s.effects.some((e) => e.kind === 'fan' && e.owner === a.me.slot)),
+    ).toBe(true);
+    expect(b.latest!.own!.feet[2]).toBeLessThan(2.5 - 1);
+    await a.close();
+    await b.close();
+  });
+
+  it('Fridge Magnet: B sees the magnet effect of A', async () => {
+    const [a, b, room] = await startTwo();
+    await fire(a, room, 'magnet');
+    await waitFor(
+      () => b.latest!.effects.some((e) => e.kind === 'magnet' && e.owner === a.me.slot),
+      'magnet in B snapshots',
+    );
     await a.close();
     await b.close();
   });

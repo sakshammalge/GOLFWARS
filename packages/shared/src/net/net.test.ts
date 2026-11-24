@@ -137,6 +137,7 @@ function snap(tick: number, x: number, bx = 0, hole = 0): Snapshot {
     own: null,
     crates: 0,
     gadget: null,
+    effects: [],
     players: [p],
   };
 }

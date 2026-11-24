@@ -5,8 +5,11 @@ import { BALL_GROUPS } from '../character/groups.js';
 import { PHYSICS, STEP_DT } from './config.js';
 
 export type Vec3 = [number, number, number];
-/** moving: in play. resting: waiting for the next shot. holed: in the cup. */
-export type BallPhase = 'moving' | 'resting' | 'holed';
+/**
+ * moving: in play. resting: waiting for the next shot. holed: in the cup. trapped: frozen in a
+ * Bubble Wand bubble (cannot be hit, comes back at rest).
+ */
+export type BallPhase = 'moving' | 'resting' | 'holed' | 'trapped';
 
 export interface StepEvents {
   /** Ball just came to rest (after having been in motion). */
@@ -58,6 +61,9 @@ export class Ball {
   private restTime = 0;
   private lastRest: Vec3;
   private grounded: Surface | null = null;
+  /** Seconds left in a bubble trap, and whether the ball was resting when it got trapped. */
+  private trapLeft = 0;
+  private trapWasResting = false;
 
   constructor(
     private readonly world: World,
@@ -135,6 +141,53 @@ export class Ball {
     if (markAsLastRest) this.lastRest = [...pos];
   }
 
+  /**
+   * Freezes the ball in place for `seconds` (Bubble Wand): no movement, no shots, no cup. When the
+   * time is up it is released: a ball that was resting is at rest again, one that was rolling or
+   * in the air is released with zero speed and settles (and rests) by itself.
+   */
+  trap(seconds: number): boolean {
+    if (this.phase === 'holed') return false;
+    if (this.phase === 'trapped') {
+      this.trapLeft = Math.max(this.trapLeft, seconds);
+      return true;
+    }
+    this.trapWasResting = this.phase === 'resting';
+    this.trapLeft = seconds;
+    this.phase = 'trapped';
+    this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    this.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+    return true;
+  }
+
+  /** Seconds of trap left (0 when not trapped). */
+  get trappedFor(): number {
+    return this.phase === 'trapped' ? this.trapLeft : 0;
+  }
+
+  /** Adds to the velocity (fan, magnet). A resting ball starts moving; holed / trapped balls ignore it. */
+  addVelocity(dv: Vec3): void {
+    if (this.phase === 'holed' || this.phase === 'trapped') return;
+    const v = this.body.linvel();
+    this.body.setLinvel({ x: v.x + dv[0], y: v.y + dv[1], z: v.z + dv[2] }, true);
+    if (this.phase === 'resting') {
+      this.phase = 'moving';
+      this.restTime = 0;
+    }
+  }
+
+  /** A moving ball stops dead where it is and counts as resting (Gum Blob). Returns whether it did. */
+  stopDead(): boolean {
+    if (this.phase !== 'moving') return false;
+    this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    this.phase = 'resting';
+    this.restTime = 0;
+    this.lastRest = this.position();
+    return true;
+  }
+
   /** Launch velocity for a shot: yaw in radians (0 = towards -z), power in 0..1. */
   static shotVelocity(yaw: number, power: number): Vec3 {
     const p = Math.min(1, Math.max(0, power));
@@ -158,6 +211,7 @@ export class Ball {
 
   /** Before `world.step()`: finds the surface underfoot and sets the rolling damping. */
   prepare(): void {
+    if (this.phase === 'trapped') return;
     this.updateGrounded();
     const mat = this.grounded ? PHYSICS.surfaces[this.grounded] : null;
     this.body.setLinearDamping(mat ? mat.rollLinearDamping : PHYSICS.ball.airLinearDamping);
@@ -167,6 +221,11 @@ export class Ball {
   /** After `world.step()`: out of bounds, cup and rest detection. */
   afterStep(): StepEvents {
     if (this.phase === 'holed') return NO_EVENTS;
+    if (this.phase === 'trapped') {
+      this.trapLeft -= STEP_DT;
+      if (this.trapLeft <= 1e-9) this.release();
+      return NO_EVENTS;
+    }
     const events: StepEvents = { rest: false, holed: false, outOfBounds: false };
 
     const pos = this.position();
@@ -201,6 +260,20 @@ export class Ball {
       }
     }
     return events;
+  }
+
+  private release(): void {
+    this.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+    this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    this.trapLeft = 0;
+    this.restTime = 0;
+    if (this.trapWasResting) {
+      this.phase = 'resting';
+      this.lastRest = this.position();
+    } else {
+      this.phase = 'moving';
+    }
   }
 
   /** Removes the ball from the world. */

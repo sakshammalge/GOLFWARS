@@ -36,6 +36,7 @@ import {
 import { finishBonusFor, finishPlace, scoreHole } from '../scoring.js';
 import { createRng } from '../rng.js';
 import { GadgetInventory } from '../gadgets/inventory.js';
+import { GadgetEffects } from '../gadgets/effects.js';
 import type { GadgetType } from '../gadgets/types.js';
 
 /** One input being applied to a player this tick. */
@@ -122,6 +123,8 @@ export class MatchSim {
   private readonly rng: () => number;
   /** Crates and held gadgets of the current hole. */
   gadgets!: GadgetInventory;
+  /** Bubbles, gum, fans and magnets active on the current hole. */
+  effects!: GadgetEffects;
 
   /** `initPhysics()` must have resolved. `slots` are the occupied seats. */
   constructor(
@@ -192,6 +195,7 @@ export class MatchSim {
     this.loaded = cw.loaded;
     this.history = [];
     this.gadgets = new GadgetInventory(this.loaded.crates, this.rng);
+    this.effects = new GadgetEffects(this.world);
 
     const [tx, , tz] = this.hole.tee;
     const [cx, , cz] = this.hole.cup.position;
@@ -270,6 +274,7 @@ export class MatchSim {
     const hits = resolveBonks(windups, (a, v) => this.rewoundPosition(a, v));
     for (const h of hits) events.push({ k: 'bonk', a: h.attacker, v: h.victim });
 
+    this.effects.step(this.tickCount, this.ballMap(live), events);
     for (const p of live) p.ball!.prepare();
     this.world.step();
     const holedNow: MatchPlayer[] = [];
@@ -372,7 +377,7 @@ export class MatchSim {
     const shot = inp.entry[5];
     if (shot && playing && this.tryShot(p, shot)) events.push({ k: 'shot', p: p.slot });
     if (input.gadget && playing) this.useGadget(p, events);
-    const ev = w.step(input);
+    const ev = w.step(input, this.effects.windupEnv(p.slot, w.position()));
     if (ev.swung) {
       const lag = this.tickCount - inp.viewTick;
       p.lagTicks = Math.min(NET.lagMaxRewindTicks, Math.max(0, Math.floor(lag)));
@@ -404,6 +409,17 @@ export class MatchSim {
     const g = this.gadgets.take(p.slot, this.tickCount);
     if (!g) return;
     events.push({ k: 'use', p: p.slot, g });
+    const live = [...this.players.values()].filter((q) => q.windup);
+    this.effects.activate(
+      g,
+      { slot: p.slot, feet: w.position(), yaw: w.yaw },
+      this.tickCount,
+      this.ballMap(live),
+    );
+  }
+
+  private ballMap(live: readonly MatchPlayer[]): Map<number, Ball> {
+    return new Map(live.map((p) => [p.slot, p.ball!]));
   }
 
   /**
@@ -515,6 +531,7 @@ export class MatchSim {
       ack: me?.ackSeq ?? 0,
       own: me?.windup?.getState() ?? null,
       crates: this.gadgets.crateMask(this.tickCount),
+      effects: this.effects.net(),
       gadget: this.gadgets.heldBy(slot),
       players,
     };

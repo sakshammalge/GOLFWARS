@@ -2,6 +2,7 @@ import type { WindupStatus } from '../character/windup.js';
 import type { BallPhase, Vec3 } from '../physics/golfSim.js';
 import { STEP_DT } from '../physics/config.js';
 import { NET } from './config.js';
+import type { NetEffect } from '../gadgets/types.js';
 import type { NetPlayer, Snapshot } from './snapshot.js';
 
 export interface RenderWindup {
@@ -72,6 +73,23 @@ export class SnapshotBuffer {
 
   clear(): void {
     this.snaps = [];
+  }
+
+  /** Gadget effects at a (fractional) tick: moving bubbles are interpolated, the rest are as sent. */
+  sampleEffects(tick: number): NetEffect[] {
+    const n = this.snaps.length;
+    if (n === 0) return [];
+    let hi = this.snaps.findIndex((s) => s.tick >= tick);
+    if (hi === -1) hi = n - 1;
+    const b = this.snaps[hi]!;
+    const a = hi > 0 ? this.snaps[hi - 1]! : b;
+    const span = b.tick - a.tick;
+    const t = span > 0 ? Math.min(1, Math.max(0, (tick - a.tick) / span)) : 1;
+    return b.effects.map((e) => {
+      if (e.kind !== 'bubble') return e;
+      const prev = a.effects.find((x) => x.kind === 'bubble' && x.id === e.id);
+      return prev ? { ...e, pos: lerp3(prev.pos, e.pos, t) } : e;
+    });
   }
 
   sample(tick: number): RenderPlayer[] {

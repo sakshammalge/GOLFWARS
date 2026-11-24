@@ -27,6 +27,49 @@ export const BALANCE = {
     useCooldownSeconds: 0.5,
   },
 
+  /** The four gadgets. Times in seconds, distances in metres, accelerations in m/s^2. */
+  gadgets: {
+    bubble: {
+      /** Travel speed of the bubble. */
+      speed: 5,
+      /** The bubble traps the first ball whose centre comes within radius + ball radius. */
+      radius: 0.5,
+      /** The bubble pops after this long if it touches nothing (about 20 m of range). */
+      lifetime: 4,
+      /** How long a trapped ball is frozen and unhittable. */
+      trapSeconds: 4,
+      /** Where it spawns, in front of the user's feet (m), and how high above the floor. */
+      spawnDistance: 1,
+      height: 0.4,
+    },
+    gum: {
+      /** Radius of the sticky patch. */
+      radius: 1,
+      lifetime: 20,
+      /** Placed this far in front of the user. */
+      placeDistance: 1.6,
+      /** Windups inside move at this fraction of their normal speed. */
+      windupSpeedScale: 0.4,
+    },
+    fan: {
+      duration: 2,
+      /** Reach of the cone and its half angle. */
+      range: 5,
+      halfAngleDeg: 50,
+      /** Ball push (m/s^2, away from the fan, fading to half at full range). */
+      ballAccel: 10,
+      /** Windup drift speed (m/s, away from the fan, fading to half at full range). */
+      windupDrift: 4,
+    },
+    magnet: {
+      duration: 5,
+      /** Other players' moving balls within this distance of the magnet ball are pulled in. */
+      range: 4,
+      /** Pull strength towards the magnet ball (m/s^2): gentle. */
+      pullAccel: 3.5,
+    },
+  },
+
   /** Existing configs, listed here so one file documents (and can override) every number. */
   physics: PHYSICS,
   windup: WINDUP,

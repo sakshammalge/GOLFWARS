@@ -63,6 +63,18 @@ export const NO_INPUT: WindupInput = {
   aimYaw: null,
 };
 
+/**
+ * Outside influences on one step, decided by the match (gadgets) and not by the Windup itself:
+ * `speedScale` multiplies the wanted walking speed (Gum Blob: 0.4), `drift` is an extra horizontal
+ * displacement speed in m/s that is not part of the Windup's own velocity (Desk Fan wind).
+ */
+export interface WindupEnv {
+  speedScale: number;
+  drift: readonly [number, number];
+}
+
+export const NO_ENV: WindupEnv = { speedScale: 1, drift: [0, 0] };
+
 export interface WindupEvents {
   /** Fell off the course: the caller should `respawnNear` the ball. */
   fell: boolean;
@@ -252,7 +264,7 @@ export class Windup {
   }
 
   /** Advances one fixed step. */
-  step(input: WindupInput = NO_INPUT): WindupEvents {
+  step(input: WindupInput = NO_INPUT, env: WindupEnv = NO_ENV): WindupEvents {
     const dt = STEP_DT;
     const events: WindupEvents = { fell: false, jumped: false, swung: false, gotUp: false };
     events.gotUp = stepBonk(this.bonk, dt);
@@ -290,6 +302,7 @@ export class Windup {
     const sprinting = input.sprint && wantsMove && canSprint(this.key);
     let speed = sprinting ? WINDUP.sprintSpeed : WINDUP.walkSpeed;
     if (swinging) speed *= BONK.swingMoveScale;
+    speed *= env.speedScale;
     const tx = wx * speed;
     const tz = wz * speed;
     const accel = toppled
@@ -325,7 +338,11 @@ export class Windup {
     // Move through the course with the character controller.
     if (this.vel[1] > 0) this.kcc.disableSnapToGround();
     else this.kcc.enableSnapToGround(WINDUP.controller.snapDistance);
-    const want = { x: this.vel[0] * dt, y: this.vel[1] * dt, z: this.vel[2] * dt };
+    const want = {
+      x: (this.vel[0] + env.drift[0]) * dt,
+      y: this.vel[1] * dt,
+      z: (this.vel[2] + env.drift[1]) * dt,
+    };
     this.kcc.computeColliderMovement(
       this.collider,
       want,
