@@ -214,7 +214,7 @@ export class MatchBoard {
       h('th', {}, 'Player'),
       ...holeNames.map((n, i) => h('th', { title: n }, `${i + 1}`)),
       h('th', {}, 'Total'),
-      h('th', {}, '+/-'),
+      h('th', { title: 'Strokes vs par' }, 'Strokes +/-'),
     );
     const body = ranked.map((r) =>
       h(
@@ -237,7 +237,11 @@ export class MatchBoard {
           );
         }),
         h('td', {}, signed(r.total)),
-        h('td', {}, formatToPar(r.total - totalPar)),
+        h(
+          'td',
+          { title: 'Strokes vs par (no race bonus)' },
+          formatToPar(r.row.scores.reduce((a, b) => a + b, 0) - totalPar),
+        ),
       ),
     );
     const parRow = h(
