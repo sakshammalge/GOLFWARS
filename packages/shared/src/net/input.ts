@@ -10,6 +10,7 @@ export type ShotTuple = [aimYaw: number, fineAim: number, power: number];
 export const FLAG_SPRINT = 1;
 export const FLAG_JUMP = 2;
 export const FLAG_SWING = 4;
+export const FLAG_GADGET = 8;
 
 /**
  * One 1/60 s tick of input on the wire: [moveX, moveZ, cameraYaw, flags, aimYaw | null, shot?].
@@ -32,7 +33,8 @@ export function toEntry(input: WindupInput, shot?: ShotTuple): InputEntry {
   const flags =
     (input.sprint ? FLAG_SPRINT : 0) |
     (input.jump ? FLAG_JUMP : 0) |
-    (input.swing ? FLAG_SWING : 0);
+    (input.swing ? FLAG_SWING : 0) |
+    (input.gadget ? FLAG_GADGET : 0);
   const base: [number, number, number, number, number | null] = [
     input.moveX,
     input.moveZ,
@@ -51,6 +53,7 @@ export function fromEntry(e: InputEntry): WindupInput {
     sprint: (e[3] & FLAG_SPRINT) !== 0,
     jump: (e[3] & FLAG_JUMP) !== 0,
     swing: (e[3] & FLAG_SWING) !== 0,
+    gadget: (e[3] & FLAG_GADGET) !== 0,
     aimYaw: e[4],
   };
 }
@@ -68,7 +71,7 @@ export function sanitizeEntry(raw: unknown): InputEntry | null {
     clamp(x, -1, 1),
     clamp(z, -1, 1),
     yaw,
-    flags & 7,
+    flags & 15,
     aim,
   ];
   if (raw.length === 5) return base;

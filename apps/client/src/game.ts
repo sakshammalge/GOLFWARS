@@ -349,6 +349,7 @@ export class Game {
       moveZ: k.axis('KeyS', 'KeyW'),
       cameraYaw: this.stage.rig.yaw,
       sprint: k.isDown('ShiftLeft') || k.isDown('ShiftRight'),
+      gadget: false,
       jump: k.isDown('Space'),
       swing: this.swingQueued,
       aimYaw: this.controls.charging ? this.shootYaw(this.controls.aimOffset) : null,

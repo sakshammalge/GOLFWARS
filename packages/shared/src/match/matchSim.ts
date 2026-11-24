@@ -34,6 +34,9 @@ import {
   type FlowTransition,
 } from './flow.js';
 import { finishBonusFor, finishPlace, scoreHole } from '../scoring.js';
+import { createRng } from '../rng.js';
+import { GadgetInventory } from '../gadgets/inventory.js';
+import type { GadgetType } from '../gadgets/types.js';
 
 /** One input being applied to a player this tick. */
 export interface TickInput {
@@ -116,13 +119,19 @@ export class MatchSim {
   private world!: World;
   private loaded!: LoadedHole;
   private history: Frame[] = [];
+  private readonly rng: () => number;
+  /** Crates and held gadgets of the current hole. */
+  gadgets!: GadgetInventory;
 
   /** `initPhysics()` must have resolved. `slots` are the occupied seats. */
   constructor(
     readonly holes: readonly Hole[],
     slots: readonly number[],
     readonly config: MatchConfig = MATCH,
+    /** Seeds the crate contents (which gadget a crate gives), so tests and replays are exact. */
+    seed = 1,
   ) {
+    this.rng = createRng(seed);
     if (holes.length === 0) throw new Error('a match needs at least one hole');
     this.flow = createFlow(holes.length);
     startFlow(this.flow, config);
@@ -182,6 +191,7 @@ export class MatchSim {
     this.world = cw.world;
     this.loaded = cw.loaded;
     this.history = [];
+    this.gadgets = new GadgetInventory(this.loaded.crates, this.rng);
 
     const [tx, , tz] = this.hole.tee;
     const [cx, , cz] = this.hole.cup.position;
@@ -214,6 +224,7 @@ export class MatchSim {
     if (!p || p.abandoned) return;
     p.abandoned = true;
     p.connected = false;
+    this.gadgets.clear(slot);
     this.releasePlayer(p);
     // Mid-intro or mid-hole: this hole scores par + 3 at once (a hole already holed keeps its strokes).
     if (p.round.phase === 'hole-intro' || p.round.phase === 'playing') {
@@ -254,6 +265,7 @@ export class MatchSim {
       for (const inp of inputs.get(p.slot) ?? []) this.applyInput(p, inp, events);
     }
     this.recordFrame();
+    if (this.phase === 'playing') this.pickUpCrates(live, events);
     const windups = live.map((p) => p.windup!);
     const hits = resolveBonks(windups, (a, v) => this.rewoundPosition(a, v));
     for (const h of hits) events.push({ k: 'bonk', a: h.attacker, v: h.victim });
@@ -359,6 +371,7 @@ export class MatchSim {
       : { ...NO_INPUT, cameraYaw: inp.entry[2] };
     const shot = inp.entry[5];
     if (shot && playing && this.tryShot(p, shot)) events.push({ k: 'shot', p: p.slot });
+    if (input.gadget && playing) this.useGadget(p, events);
     const ev = w.step(input);
     if (ev.swung) {
       const lag = this.tickCount - inp.viewTick;
@@ -368,6 +381,29 @@ export class MatchSim {
       w.respawnNear(p.ball!.position(), w.yaw);
       events.push({ k: 'fell', p: p.slot });
     }
+  }
+
+  // ------------------------------------------------------------------ gadgets
+
+  private pickUpCrates(live: MatchPlayer[], events: GameEvent[]): void {
+    for (const p of live) {
+      const got = this.gadgets.pickup(p.slot, p.windup!.position(), this.tickCount);
+      if (got) events.push({ k: 'pickup', p: p.slot, g: got });
+    }
+  }
+
+  /** Gives a player a gadget directly (unit tests and the dev cheat hook). */
+  grantGadget(slot: number, gadget: GadgetType): void {
+    this.gadgets.grant(slot, gadget, this.tickCount);
+  }
+
+  /** Server-side validation of "use gadget": holding one, off cooldown, on its feet. */
+  private useGadget(p: MatchPlayer, events: GameEvent[]): void {
+    const w = p.windup!;
+    if (w.key.frozen || w.status === 'topple') return;
+    const g = this.gadgets.take(p.slot, this.tickCount);
+    if (!g) return;
+    events.push({ k: 'use', p: p.slot, g });
   }
 
   /**
@@ -478,6 +514,8 @@ export class MatchSim {
       phase: this.phase,
       ack: me?.ackSeq ?? 0,
       own: me?.windup?.getState() ?? null,
+      crates: this.gadgets.crateMask(this.tickCount),
+      gadget: this.gadgets.heldBy(slot),
       players,
     };
   }

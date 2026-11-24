@@ -2,6 +2,7 @@ import { createBonk } from '../character/bonk.js';
 import type { WindupState, WindupStatus } from '../character/windup.js';
 import { createKey } from '../character/stamina.js';
 import type { BallPhase, Vec3 } from '../physics/golfSim.js';
+import { gadgetFromId, gadgetId, type GadgetType } from '../gadgets/types.js';
 import { NET } from './config.js';
 
 /** Where the match is, as carried in every snapshot. */
@@ -44,6 +45,10 @@ export interface Snapshot {
   ack: number;
   /** Full state of the receiving client's own Windup, for prediction. */
   own: WindupState | null;
+  /** Bit i set = crate i of the hole is available. */
+  crates: number;
+  /** The receiving player's held gadget. */
+  gadget: GadgetType | null;
   players: NetPlayer[];
 }
 
@@ -147,6 +152,7 @@ type Basis = Map<number, { w: [number, number, number]; b: [number, number, numb
  * snapshots everything is sent in full as a safety net. Layout:
  *
  *   u32 tick | u8 holeIndex | u8 phase(3 bits)+hasOwn(bit 6)+keyframe(bit 7) | u32 ack
+ *   u8 crate availability mask | u8 own gadget id (0 = none)
  *   [own state: 12 f32 + flags + 4 f32 + hitCount + hit ids]    (only when hasOwn)
  *   u8 playerCount, then per player:
  *     u8 slot(3)+hasWindupPos(bit 3)+hasBallPos(bit 4)+ballPhase(bits 5-6)
@@ -171,6 +177,8 @@ export class SnapshotEncoder {
     w.u8(s.holeIndex);
     w.u8(MATCH_PHASES.indexOf(s.phase) | (s.own ? 64 : 0) | (key ? 128 : 0));
     w.u32(s.ack);
+    w.u8(s.crates);
+    w.u8(gadgetId(s.gadget));
     if (s.own) writeOwn(w, s.own);
     w.u8(s.players.length);
     const next: Basis = new Map();
@@ -218,6 +226,8 @@ export class SnapshotDecoder {
     const pf = r.u8();
     const phase = MATCH_PHASES[pf & 7] ?? 'playing';
     const ack = r.u32();
+    const crates = r.u8();
+    const gadget = gadgetFromId(r.u8());
     const own = pf & 64 ? readOwn(r) : null;
     const n = r.u8();
     const players: NetPlayer[] = [];
@@ -250,6 +260,6 @@ export class SnapshotDecoder {
       next.set(slot, p);
     }
     this.last = next;
-    return { tick, holeIndex, phase, ack, own, players };
+    return { tick, holeIndex, phase, ack, own, crates, gadget, players };
   }
 }

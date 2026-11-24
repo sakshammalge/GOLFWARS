@@ -13,6 +13,7 @@ import {
 } from 'three';
 import { KITCHEN_TABLE, KITCHEN_TABLE_NAME, type Hole } from '@golfwars/courses';
 import {
+  GADGET_INFO,
   GolfSim,
   NET,
   NO_INPUT,
@@ -41,7 +42,8 @@ import {
   type WindupInput,
 } from '@golfwars/shared';
 import { AimPreview } from './aimPreview.js';
-import { buildHoleMeshes } from './courseMeshes.js';
+import { buildHoleMeshes, type HoleGroup } from './courseMeshes.js';
+import { animateCrate } from './gadgetMeshes.js';
 import { Hud } from './hud.js';
 import type { Connection } from './net/connection.js';
 import type { Stage } from './scene.js';
@@ -140,7 +142,7 @@ export class OnlineGame {
   );
   private readonly smoother = new VisualSmoother();
   private readonly remotes = new Map<number, RemoteActor>();
-  private courseGroup: Group | null = null;
+  private courseGroup: HoleGroup | null = null;
 
   private active = false;
   private holeIndex = -1;
@@ -164,6 +166,7 @@ export class OnlineGame {
   private pendingShot: ShotTuple | null = null;
   private shotLockUntil = 0;
   private swingQueued = false;
+  private gadgetQueued = false;
   private sprintingNow = false;
 
   // Prediction error stats for the F3 panel.
@@ -184,6 +187,8 @@ export class OnlineGame {
     this.stage.rig.onRightClick = () => (this.swingQueued = this.active);
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyF' && !e.repeat && this.active) this.swingQueued = true;
+      if (e.code === 'KeyQ' && !e.repeat && this.active && !(e.target instanceof HTMLInputElement))
+        this.gadgetQueued = true;
     });
     this.controls = new ShotControls(stage.renderer.domElement, stage.keys, {
       onShoot: (power, aimOffset) => this.shoot(power, aimOffset),
@@ -276,7 +281,7 @@ export class OnlineGame {
     this.ready = false;
     this.smoother.reset();
 
-    this.courseGroup = buildHoleMeshes(hole);
+    this.courseGroup = buildHoleMeshes(hole, { crates: true });
     this.stage.scene.add(this.courseGroup);
     const b = this.course.loaded.bounds;
     this.table.position.set((b.minX + b.maxX) / 2, b.minY - 0.5 - 0.01, (b.minZ + b.maxZ) / 2);
@@ -294,6 +299,7 @@ export class OnlineGame {
         : (hole.startYaw * Math.PI) / 180;
     this.controls.resetAim();
     this.swingQueued = false;
+    this.gadgetQueued = false;
   }
 
   private myColor(): number {
@@ -430,6 +436,17 @@ export class OnlineGame {
         case 'shot':
           if (e.p !== this.slot) this.remotes.get(e.p)?.model.playShot();
           break;
+        case 'pickup':
+          // Only the picker is told which gadget it got.
+          if (e.p === this.slot) this.hud.showToast(`${GADGET_INFO[e.g].name}! Press Q to use it`);
+          break;
+        case 'use':
+          this.hud.showToast(
+            e.p === this.slot
+              ? `You used the ${GADGET_INFO[e.g].name}`
+              : `${name(e.p)} used the ${GADGET_INFO[e.g].name}!`,
+          );
+          break;
         default:
           break;
       }
@@ -444,6 +461,7 @@ export class OnlineGame {
     const me = this.players.find((p) => p.slot === this.slot);
     if (this.phase !== 'playing' || me?.abandoned) {
       this.swingQueued = false;
+      this.gadgetQueued = false;
       return base;
     }
     const input: WindupInput = {
@@ -453,9 +471,11 @@ export class OnlineGame {
       sprint: k.isDown('ShiftLeft') || k.isDown('ShiftRight'),
       jump: k.isDown('Space'),
       swing: this.swingQueued,
+      gadget: this.gadgetQueued,
       aimYaw: this.controls.charging ? this.shootYaw(this.controls.aimOffset) : null,
     };
     this.swingQueued = false;
+    this.gadgetQueued = false;
     return input;
   }
 
@@ -504,7 +524,8 @@ export class OnlineGame {
     this.curPos = predictor.windup.position();
     // `fell` is the server's call (it respawns us next to the ball): ignore it locally.
     this.outbox.push({ seq, entry: toEntry(input, shot) });
-    if (this.outbox.length >= NET.input.clientBatchTicks || shot || input.swing) this.flush();
+    if (this.outbox.length >= NET.input.clientBatchTicks || shot || input.swing || input.gadget)
+      this.flush();
   }
 
   /** Sends the queued per-tick inputs as one packet. */
@@ -588,6 +609,14 @@ export class OnlineGame {
       this.stage.rig.setFollow(ownBallPos[0], ownBallPos[1], ownBallPos[2]);
     }
 
+    // Crates: bob while available, hidden while empty (the mask comes in every snapshot).
+    const mask = this.latest?.crates ?? 0;
+    this.courseGroup?.crates.forEach((c, i) => {
+      c.visible = (mask & (1 << i)) !== 0;
+      if (c.visible) animateCrate(c, this.crateBase(i), now / 1000, i * 1.7);
+    });
+    this.hud.setGadget(this.latest?.gadget ?? null);
+
     const canShoot = this.canShoot();
     this.controls.setEnabled(canShoot);
     this.controls.update(dt);
@@ -618,6 +647,10 @@ export class OnlineGame {
     }
 
     this.updateDebug(dt, now, w);
+  }
+
+  private crateBase(i: number): number {
+    return this.course?.loaded.crates[i]?.[1] ?? 0.3;
   }
 
   private actorFor(slot: number): RemoteActor {
@@ -760,6 +793,11 @@ export class OnlineGame {
       },
       /** Sends a test-hook message (only honoured by a server started with GOLFWARS_CHEATS=1). */
       cheat: (k: string) => this.conn?.send('cheat', { k }),
+      /** Test hook: give yourself a gadget / stand beside crate `i` (dx metres along x). */
+      giveGadget: (g: string) => this.conn?.send('cheat', { k: 'gadget', g }),
+      toCrate: (i: number, dx = 0) => this.conn?.send('cheat', { k: 'crate', i, dx }),
+      gadget: () => this.latest?.gadget ?? null,
+      crateMask: () => this.latest?.crates ?? 0,
       aimCameraAt: (x: number, z: number) => {
         const p = this.predictor?.windup.position();
         if (p) this.stage.rig.yaw = Math.atan2(-(x - p[0]), -(z - p[2]));

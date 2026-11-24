@@ -17,6 +17,16 @@ export const BALANCE = {
     finishBonus: [-2, -1] as number[],
   },
 
+  /** Gadget crates and the one-slot inventory. */
+  crate: {
+    /** Walking this close (m, horizontal) to a crate picks it up, if the slot is empty. */
+    pickupRadius: 0.9,
+    /** A picked-up crate comes back after this long (s). */
+    respawnSeconds: 20,
+    /** Minimum time (s) between getting / using a gadget and using it. */
+    useCooldownSeconds: 0.5,
+  },
+
   /** Existing configs, listed here so one file documents (and can override) every number. */
   physics: PHYSICS,
   windup: WINDUP,

@@ -576,3 +576,63 @@
   color: #9f9;
   font-weight: 600;
 }
+
+/* Gadget slot (HUD, bottom left). */
+#hud-gadget {
+  position: absolute;
+  left: 8px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 230px;
+  max-width: 330px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.58);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+}
+#hud-gadget.empty {
+  opacity: 0.7;
+  border-style: dashed;
+}
+#hud-gadget .icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+}
+#hud-gadget .name {
+  font-weight: 700;
+  font-size: 16px;
+}
+#hud-gadget .hint {
+  font-size: 12px;
+  opacity: 0.8;
+  line-height: 1.25;
+}
+#hud-gadget .keycap {
+  flex: none;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  line-height: 26px;
+  text-align: center;
+  font-weight: 800;
+  border-radius: 6px;
+  background: #fff;
+  color: #222;
+  box-shadow: 0 2px 0 #999;
+}
+#hud-gadget:not(.empty) {
+  animation: gadget-pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes gadget-pulse {
+  from {
+    box-shadow: 0 0 0 0 rgba(255, 226, 122, 0);
+  }
+  to {
+    box-shadow: 0 0 14px 2px rgba(255, 226, 122, 0.7);
+  }
+}

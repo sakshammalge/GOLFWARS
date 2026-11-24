@@ -10,6 +10,7 @@ import {
   DoubleSide,
 } from 'three';
 import { STAMINA } from '@golfwars/shared';
+import { createCrateMesh } from './gadgetMeshes.js';
 import {
   pieceBoxes,
   pieceQuaternion,
@@ -40,15 +41,29 @@ function mat(color: number): MeshStandardMaterial {
   return m;
 }
 
+/** A built hole: the meshes plus its gadget crates in hole order (index = bit in the crate mask). */
+export type HoleGroup = Group & { crates: Group[] };
+
 /**
  * Builds simple flat-colour Three.js meshes from the same hole data (and the same piece
  * transforms and box layout) that the physics loader uses, so visuals and colliders match.
  */
-export function buildHoleMeshes(hole: Hole): Group {
-  const group = new Group();
+export function buildHoleMeshes(hole: Hole, opts: { crates?: boolean } = {}): HoleGroup {
+  const group = new Group() as HoleGroup;
   group.name = `hole-${hole.id}`;
+  group.crates = [];
 
   for (const piece of hole.pieces) {
+    if (piece.type === 'crate') {
+      // Gadget crates only exist in online matches; the caller shows and animates them.
+      if (opts.crates) {
+        const crate = createCrateMesh(resolveSize(piece)[0]);
+        crate.position.set(...piece.position);
+        group.add(crate);
+        group.crates.push(crate);
+      }
+      continue;
+    }
     const q = pieceQuaternion(piece);
     const holder = new Group();
     holder.position.set(...piece.position);

@@ -14,6 +14,8 @@ function sample(tick: number, x = 1.234): Snapshot {
     holeIndex: 1,
     phase: 'playing',
     ack: 77,
+    crates: 0b101,
+    gadget: 'fan',
     own: {
       feet: [x, 0.5, -2],
       vel: [1, 0, 2],
@@ -48,6 +50,8 @@ describe('snapshot codec', () => {
     expect(d.holeIndex).toBe(1);
     expect(d.phase).toBe('playing');
     expect(d.ack).toBe(77);
+    expect(d.crates).toBe(0b101);
+    expect(d.gadget).toBe('fan');
     expect(d.own!.feet[0]).toBeCloseTo(1.234, 5);
     expect(d.own!.bonk.hit).toEqual([3, 5]);
     expect(d.own!.bonk.swingT).toBeCloseTo(0.2, 5);

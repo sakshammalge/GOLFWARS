@@ -1,3 +1,5 @@
+import type { GadgetType } from './gadgets/types.js';
+
 /** Bump when client and server can no longer talk to each other. */
 export const PROTOCOL_VERSION = 3;
 
@@ -70,4 +72,8 @@ export type GameEvent =
   | { k: 'bonk'; a: number; v: number }
   | { k: 'fell'; p: number }
   | { k: 'timeout'; p: number }
-  | { k: 'hole'; i: number };
+  | { k: 'hole'; i: number }
+  /** `p` walked into a crate and got gadget `g`. */
+  | { k: 'pickup'; p: number; g: GadgetType }
+  /** `p` used gadget `g`. */
+  | { k: 'use'; p: number; g: GadgetType };

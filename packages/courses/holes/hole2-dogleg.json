@@ -57,30 +57,9 @@
     },
     {
       "type": "wall",
-      "position": [1.65, 0.5, 1.35],
-      "rotation": 0,
-      "size": [0.3, 1.4, 12.3],
-      "surface": "wood"
-    },
-    {
-      "type": "wall",
-      "position": [-1.65, 0.5, 3.0],
-      "rotation": 0,
-      "size": [0.3, 1.4, 9.3],
-      "surface": "wood"
-    },
-    {
-      "type": "wall",
       "position": [0, 0.5, 7.65],
       "rotation": 0,
       "size": [3.6, 1.4, 0.3],
-      "surface": "wood"
-    },
-    {
-      "type": "wall",
-      "position": [-7.2, 0.5, -1.35],
-      "rotation": 0,
-      "size": [10.9, 1.4, 0.3],
       "surface": "wood"
     },
     {
@@ -103,6 +82,147 @@
       "rotation": 0,
       "size": [0.4, 1.2, 0.4],
       "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-1.65, 0.5, 0.825],
+      "rotation": 0,
+      "size": [0.3, 1.4, 4.95],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-1.65, 0.5, 6.275],
+      "rotation": 0,
+      "size": [0.3, 1.4, 2.75],
+      "surface": "wood"
+    },
+    {
+      "type": "floor",
+      "position": [-3.2, -0.2, 4.1],
+      "rotation": 0,
+      "size": [3.2, 0.4, 1.6],
+      "surface": "felt"
+    },
+    {
+      "type": "wall",
+      "position": [-3.45, 0.5, 3.15],
+      "rotation": 0,
+      "size": [3.3, 1.4, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-3.45, 0.5, 5.05],
+      "rotation": 0,
+      "size": [3.3, 1.4, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-4.95, 0.5, 4.1],
+      "rotation": 0,
+      "size": [0.3, 1.4, 2.2],
+      "surface": "wood"
+    },
+    {
+      "type": "crate",
+      "position": [-4.0, 0.3, 4.1],
+      "rotation": 0
+    },
+    {
+      "type": "wall",
+      "position": [1.65, 0.5, -3.55],
+      "rotation": 0,
+      "size": [0.3, 1.4, 2.5],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [1.65, 0.5, 3.4],
+      "rotation": 0,
+      "size": [0.3, 1.4, 8.2],
+      "surface": "wood"
+    },
+    {
+      "type": "floor",
+      "position": [3.2, -0.2, -1.5],
+      "rotation": 0,
+      "size": [3.2, 0.4, 1.6],
+      "surface": "felt"
+    },
+    {
+      "type": "wall",
+      "position": [3.45, 0.5, -2.45],
+      "rotation": 0,
+      "size": [3.3, 1.4, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [3.45, 0.5, -0.55],
+      "rotation": 0,
+      "size": [3.3, 1.4, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [4.95, 0.5, -1.5],
+      "rotation": 0,
+      "size": [0.3, 1.4, 2.2],
+      "surface": "wood"
+    },
+    {
+      "type": "crate",
+      "position": [4.0, 0.3, -1.5],
+      "rotation": 0
+    },
+    {
+      "type": "wall",
+      "position": [-8.625, 0.5, -1.35],
+      "rotation": 0,
+      "size": [8.05, 1.4, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-2.375, 0.5, -1.35],
+      "rotation": 0,
+      "size": [1.25, 1.4, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "floor",
+      "position": [-3.8, -0.2, -0.55],
+      "rotation": 0,
+      "size": [1.6, 0.4, 1.9],
+      "surface": "felt"
+    },
+    {
+      "type": "wall",
+      "position": [-4.75, 0.5, -0.25],
+      "rotation": 0,
+      "size": [0.3, 1.4, 1.9],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-2.85, 0.5, -0.25],
+      "rotation": 0,
+      "size": [0.3, 1.4, 1.9],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-3.8, 0.5, 0.55],
+      "rotation": 0,
+      "size": [2.2, 1.4, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "crate",
+      "position": [-3.8, 0.3, -0.4],
+      "rotation": 0
     }
   ],
   "cup": {

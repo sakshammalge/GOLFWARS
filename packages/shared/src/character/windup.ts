@@ -46,6 +46,8 @@ export interface WindupInput {
   jump: boolean;
   /** Start a club swing now (the caller sends it for one step per click). */
   swing: boolean;
+  /** Use the held gadget now (one step per key press). Ignored by the Windup itself: the match handles it. */
+  gadget: boolean;
   /** When not null the Windup is planted (charging a shot) and turns to face this yaw. */
   aimYaw: number | null;
 }
@@ -57,6 +59,7 @@ export const NO_INPUT: WindupInput = {
   sprint: false,
   jump: false,
   swing: false,
+  gadget: false,
   aimYaw: null,
 };
 

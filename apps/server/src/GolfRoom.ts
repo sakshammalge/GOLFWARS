@@ -1,6 +1,7 @@
 import { Room, ServerError, type Client } from '@colyseus/core';
 import { KITCHEN_TABLE, type Hole } from '@golfwars/courses';
 import {
+  GADGETS,
   GOLF_ROOM,
   InputBuffer,
   MATCH,
@@ -17,6 +18,7 @@ import {
   initPhysics,
   isColorIndex,
   sanitizePacket,
+  type GadgetType,
   type GameEvent,
   type JoinOptions,
   type MatchConfig,
@@ -31,6 +33,8 @@ export interface GolfRoomConfig {
   holes: Hole[];
   /** Seconds a dropped player's seat is held (tests shorten it). */
   reconnectSeconds: number;
+  /** Fixes the crate RNG (tests); by default every match gets a random seed. */
+  seed?: number;
 }
 
 export const DEFAULT_ROOM_CONFIG: GolfRoomConfig = {
@@ -147,6 +151,21 @@ export class GolfRoom extends Room<GolfState> {
         if (msg?.k === 'holeout' && ball && this.sim?.phase === 'playing') {
           const cup = this.sim.hole.cup.position;
           ball.teleport([cup[0], cup[1] + 0.2, cup[2]]);
+        }
+        const m = msg as { k?: unknown; g?: unknown; i?: unknown; dx?: unknown };
+        // {k:'gadget', g}: hand out a gadget. {k:'crate', i, dx}: stand `dx` m beside crate i.
+        if (
+          m.k === 'gadget' &&
+          p &&
+          typeof m.g === 'string' &&
+          (GADGETS as readonly string[]).includes(m.g)
+        ) {
+          this.sim?.grantGadget(p.slot, m.g as GadgetType);
+        }
+        if (m.k === 'crate' && p && this.sim && typeof m.i === 'number') {
+          const c = this.sim.gadgets.crates[m.i]?.pos;
+          const dx = typeof m.dx === 'number' ? m.dx : 0;
+          if (c) this.sim.windupOf(p.slot)?.setPosition([c[0] + dx, c[1] - 0.3, c[2]]);
         }
       });
     }
@@ -272,7 +291,8 @@ export class GolfRoom extends Room<GolfState> {
   private startMatch(): void {
     const slots = [...this.state.players.values()].map((p) => p.slot);
     if (slots.length === 0) return;
-    this.sim = new MatchSim(this.config.holes, slots, this.config.match);
+    const seed = this.config.seed ?? Math.floor(Math.random() * 0x100000000);
+    this.sim = new MatchSim(this.config.holes, slots, this.config.match, seed);
     this.state.phase = 'match';
     this.state.matchPhase = this.sim.phase;
     this.state.holeIndex = 0;

@@ -5,7 +5,7 @@ const MIN_PITCH = MathUtils.degToRad(15);
 const MAX_PITCH = MathUtils.degToRad(70);
 const MIN_DIST = 3;
 const MAX_DIST = 18;
-const KEY_ORBIT_SPEED = 1.8; // rad/s for Q/E
+const KEY_ORBIT_SPEED = 1.8; // rad/s for Z/C (Q is the gadget key)
 const DRAG_SPEED = 0.005; // rad/px
 
 /** A right-button press that moves less than this (px) is a click (club swing), not an orbit drag. */
@@ -13,7 +13,7 @@ const CLICK_MAX_MOVE = 5;
 
 /**
  * Third-person orbit camera that follows a target (the Windup, or the ball after a shot). Orbit
- * with right/middle mouse drag or Q/E, zoom with the wheel; a right click without dragging calls
+ * with right/middle mouse drag or Z/C, zoom with the wheel; a right click without dragging calls
  * `onRightClick` (the club swing). Pitch and distance are clamped so the camera never flips or ends
  * up inside the scene's geometry at a sensible scale.
  */
@@ -89,7 +89,7 @@ export class CameraRig {
   }
 
   update(dt: number): void {
-    this.yaw += this.keys.axis('KeyE', 'KeyQ') * KEY_ORBIT_SPEED * dt;
+    this.yaw += this.keys.axis('KeyC', 'KeyZ') * KEY_ORBIT_SPEED * dt;
     this.target.lerp(this.goal, 1 - Math.exp(-8 * dt));
     this.apply();
   }

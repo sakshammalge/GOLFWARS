@@ -75,6 +75,7 @@ export function holeBounds(hole: Hole): Bounds {
     maxY: -Infinity,
   };
   for (const p of hole.pieces) {
+    if (p.type === 'crate') continue; // pickups never extend the playable area
     const [w, h, d] = resolveSize(p);
     const [qx, qy, qz, qw] = pieceQuaternion(p);
     for (const sx of [-1, 1])
@@ -153,6 +154,18 @@ export function validateHoleGeometry(hole: Hole): string[] {
   if (cupTop === null) problems.push(`cup (${cx}, ${cz}) is not over a floor piece`);
   else if (Math.abs(cupTop - cy) > tol)
     problems.push(`cup y=${cy} is not on the floor surface (floor top is ${cupTop})`);
+
+  hole.pieces.forEach((p, i) => {
+    if (p.type !== 'crate') return;
+    const [, h] = resolveSize(p);
+    const top = floorTopAt(hole, p.position[0], p.position[2]);
+    if (top === null)
+      problems.push(`crate #${i} (${p.position[0]}, ${p.position[2]}) is not over a floor piece`);
+    else if (Math.abs(p.position[1] - h / 2 - top) > tol)
+      problems.push(
+        `crate #${i} y=${p.position[1]} does not rest on the floor (floor top is ${top})`,
+      );
+  });
 
   return problems;
 }

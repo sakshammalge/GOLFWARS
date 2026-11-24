@@ -26,7 +26,7 @@ describe('input validation', () => {
   it('rejects malformed and clamps out-of-range entries', () => {
     expect(sanitizeEntry([0, 0, NaN, 0, null])).toBeNull();
     expect(sanitizeEntry('x')).toBeNull();
-    expect(sanitizeEntry([5, -5, 0, 255, null])).toEqual([1, -1, 0, 7, null]);
+    expect(sanitizeEntry([5, -5, 0, 255, null])).toEqual([1, -1, 0, 15, null]);
     expect(sanitizeEntry([0, 0, 0, 0, null, [0, 9, 9]])).toEqual([
       0,
       0,
@@ -129,7 +129,16 @@ function snap(tick: number, x: number, bx = 0, hole = 0): Snapshot {
     windup: { pos: [x, 0, 0], yaw: 0, status: 'run', immune: false, anim: 0, key: 1 },
     ball: { pos: [bx, 0, 0], phase: 'moving' },
   };
-  return { tick, holeIndex: hole, phase: 'playing', ack: 0, own: null, players: [p] };
+  return {
+    tick,
+    holeIndex: hole,
+    phase: 'playing',
+    ack: 0,
+    own: null,
+    crates: 0,
+    gadget: null,
+    players: [p],
+  };
 }
 
 describe('SnapshotBuffer', () => {
