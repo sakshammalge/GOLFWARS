@@ -83,6 +83,7 @@ async function walkTo(x, z, tol = 0.45, sprint = false) {
 
 try {
   await page.goto(`${base}/?cheats`);
+  await page.click('#play-solo'); // M3: the menu comes first; solo offline keeps the old game
   await page.waitForFunction(() => window.golfwars?.state, null, { timeout: 30000 });
   await waitFor(async () => (await state()).phase === 'playing', 'hole 1 in play');
   await sleep(800);
