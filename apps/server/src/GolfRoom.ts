@@ -149,29 +149,7 @@ export class GolfRoom extends Room<GolfState> {
     // Test hook for the local browser e2e: only exists when the server is started with
     // GOLFWARS_CHEATS=1 (never in production).
     if (process.env.GOLFWARS_CHEATS === '1') {
-      this.onMessage('cheat', (client, msg: { k?: unknown }) => {
-        const p = this.player(client);
-        const ball = p && this.sim?.ballOf(p.slot);
-        if (msg?.k === 'holeout' && ball && this.sim?.phase === 'playing') {
-          const cup = this.sim.hole.cup.position;
-          ball.teleport([cup[0], cup[1] + 0.2, cup[2]]);
-        }
-        const m = msg as { k?: unknown; g?: unknown; i?: unknown; dx?: unknown };
-        // {k:'gadget', g}: hand out a gadget. {k:'crate', i, dx}: stand `dx` m beside crate i.
-        if (
-          m.k === 'gadget' &&
-          p &&
-          typeof m.g === 'string' &&
-          (GADGETS as readonly string[]).includes(m.g)
-        ) {
-          this.sim?.grantGadget(p.slot, m.g as GadgetType);
-        }
-        if (m.k === 'crate' && p && this.sim && typeof m.i === 'number') {
-          const c = this.sim.gadgets.crates[m.i]?.pos;
-          const dx = typeof m.dx === 'number' ? m.dx : 0;
-          if (c) this.sim.windupOf(p.slot)?.setPosition([c[0] + dx, c[1] - 0.3, c[2]]);
-        }
-      });
+      this.onMessage('cheat', (client, msg: Record<string, unknown>) => this.cheat(client, msg));
     }
 
     // Dev balance hot reload: tell every client of this room when the override changes.
@@ -242,6 +220,52 @@ export class GolfRoom extends Room<GolfState> {
     usedCodes.delete(this.roomId);
     this.sim?.dispose();
     this.sim = null;
+  }
+
+  /** Dev/test hook (GOLFWARS_CHEATS=1 only). Everything acts on the sender's own Windup / ball. */
+  private cheat(client: Client, m: Record<string, unknown>): void {
+    const sim = this.sim;
+    const p = this.player(client);
+    if (!sim || !p || sim.phase !== 'playing') return;
+    const ball = sim.ballOf(p.slot);
+    const windup = sim.windupOf(p.slot);
+    const num = (v: unknown, d = 0): number =>
+      typeof v === 'number' && Number.isFinite(v) ? v : d;
+    switch (m.k) {
+      case 'holeout':
+        if (ball) {
+          const cup = sim.hole.cup.position;
+          ball.teleport([cup[0], cup[1] + 0.2, cup[2]]);
+        }
+        break;
+      // {g}: hand out a gadget.
+      case 'gadget':
+        if (typeof m.g === 'string' && (GADGETS as readonly string[]).includes(m.g)) {
+          sim.grantGadget(p.slot, m.g as GadgetType);
+        }
+        break;
+      // {i, dx}: stand `dx` m beside crate i.
+      case 'crate': {
+        const c = sim.gadgets.crates[num(m.i)]?.pos;
+        if (c) windup?.setPosition([c[0] + num(m.dx), c[1] - 0.3, c[2]]);
+        break;
+      }
+      // {x, z, yaw}: put the Windup on the floor at (x, z) (floor height 0).
+      case 'tp':
+        windup?.setPosition([num(m.x), 0, num(m.z)]);
+        if (windup && typeof m.yaw === 'number') windup.yaw = m.yaw;
+        break;
+      // {x, z}: put the ball at rest at (x, z).
+      case 'ballat':
+        ball?.teleport([num(m.x), 0.152, num(m.z)]);
+        break;
+      // {yaw, power}: hit the ball without walking up to it.
+      case 'shoot':
+        ball?.shoot(num(m.yaw), num(m.power, 0.3));
+        break;
+      default:
+        break;
+    }
   }
 
   // ----------------------------------------------------------------- lobby

@@ -132,6 +132,11 @@ export class Ball {
 
   /** Puts the ball at rest at `pos` (used for resets and by the aim-preview scratch sim). */
   teleport(pos: Vec3, markAsLastRest = true): void {
+    if (this.trapLeft > 0) {
+      // Moving a trapped ball (reset, cheat) ends the trap.
+      this.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+      this.trapLeft = 0;
+    }
     this.body.setTranslation({ x: pos[0], y: pos[1], z: pos[2] }, true);
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);

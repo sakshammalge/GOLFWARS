@@ -3,14 +3,18 @@
 //
 //   pnpm --filter @golfwars/server bench                 # 8 players, 15 s
 //   pnpm --filter @golfwars/server bench -- 2 20         # 2 players, 20 s
+//   pnpm --filter @golfwars/server bench -- 8 20 gadgets  # bots also grab and use gadgets all the time
 import { matchMaker } from '@colyseus/core';
-import { MATCH, MessageType, NO_INPUT, STEP_DT, type WindupInput } from '@golfwars/shared';
+import { GADGETS, MATCH, MessageType, NO_INPUT, STEP_DT, type WindupInput } from '@golfwars/shared';
 import { createGameServer } from '../src/server.js';
 import type { GolfRoom } from '../src/GolfRoom.js';
 import { TestClient, sleep, waitFor } from '../test/helpers.js';
 
 const players = Number(process.argv[2] ?? 8);
 const seconds = Number(process.argv[3] ?? 15);
+const gadgets = process.argv[4] === 'gadgets';
+// The bots get their gadgets through the test hook (the server only honours it with this set).
+if (gadgets) process.env.GOLFWARS_CHEATS = '1';
 
 const server = createGameServer({
   match: { ...MATCH, introSeconds: 0.3, holeTimeSeconds: 3600 },
@@ -54,6 +58,8 @@ let running = true;
 async function bot(c: TestClient): Promise<void> {
   let input: WindupInput = NO_INPUT;
   let until = 0;
+  let nextGadget = Date.now() + 500 + Math.random() * 2000;
+  let useAt = 0;
   while (running) {
     const now = Date.now();
     if (now > until) {
@@ -67,10 +73,22 @@ async function bot(c: TestClient): Promise<void> {
         sprint: Math.random() < 0.3,
       };
     }
+    let useNow = false;
+    if (gadgets && now > nextGadget) {
+      // Get a random gadget, then press Q a moment later (after the use cooldown).
+      c.room.send('cheat', { k: 'gadget', g: GADGETS[Math.floor(Math.random() * GADGETS.length)] });
+      useAt = now + 700;
+      nextGadget = now + 2500 + Math.random() * 2500;
+    }
+    if (useAt && now > useAt) {
+      useNow = true;
+      useAt = 0;
+    }
     const tick: WindupInput = {
       ...input,
       jump: Math.random() < 0.01,
       swing: Math.random() < 0.01,
+      gadget: useNow,
     };
     const shot =
       Math.random() < 0.02
@@ -91,7 +109,7 @@ const budget = STEP_DT * 1000;
 const perClient = wire.map((w) => w.bytes / seconds);
 const snapPerClient = clients.map((c) => c.snapshotBytes / seconds);
 const mean = (a: number[]): number => a.reduce((s, v) => s + v, 0) / a.length;
-console.log(`\n=== bench: ${players} players, ${seconds} s ===`);
+console.log(`\n=== bench: ${players} players, ${seconds} s${gadgets ? ', gadgets on' : ''} ===`);
 console.log(
   `server tick: ${t.ticks} ticks, avg ${avgMs.toFixed(3)} ms, max ${t.maxMs.toFixed(2)} ms  (budget ${budget.toFixed(2)} ms, avg ${((avgMs / budget) * 100).toFixed(1)}% of a core at 60 Hz)`,
 );

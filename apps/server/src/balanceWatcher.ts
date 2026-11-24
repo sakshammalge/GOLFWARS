@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { resetBalance, setBalanceOverride } from '@golfwars/shared';
 
 /** Where the dev override lives: `apps/server/balance.dev.json` (next to `src/` and `dist/`). */
-export const DEFAULT_BALANCE_FILE = fileURLToPath(new URL('../balance.dev.json', import.meta.url));
+export const DEFAULT_BALANCE_FILE =
+  process.env.GOLFWARS_BALANCE_FILE ??
+  fileURLToPath(new URL('../balance.dev.json', import.meta.url));
 
 export interface BalanceWatcher {
   /** The override currently applied (null = none, built-in defaults). */

@@ -11,3 +11,5 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20
+      - key: NODE_ENV
+        value: production # the dev balance file hot reload is ignored in production

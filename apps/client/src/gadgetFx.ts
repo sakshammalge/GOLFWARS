@@ -157,6 +157,8 @@ function fanItem(): Item {
   }
   head.add(ring, blades);
   group.add(stand, head);
+  // The prop stands in front of the user so it is not hidden behind the Windup.
+  stand.position.z = head.position.z = -0.55;
 
   // Gust lines: thin streaks that travel outwards through the cone and fade.
   const lineMat = new MeshBasicMaterial({

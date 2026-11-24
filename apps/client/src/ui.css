@@ -355,7 +355,9 @@
   text-align: right;
 }
 #match-board th:first-child,
-#match-board td:first-child {
+#match-board td:first-child,
+#match-board th:nth-child(2),
+#match-board td:nth-child(2) {
   text-align: left;
 }
 #match-board th {
@@ -581,7 +583,7 @@
 #hud-gadget {
   position: absolute;
   left: 8px;
-  bottom: 14px;
+  bottom: 56px;
   display: flex;
   align-items: center;
   gap: 10px;

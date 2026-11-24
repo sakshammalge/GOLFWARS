@@ -13,6 +13,7 @@ import {
 } from 'three';
 import { KITCHEN_TABLE, KITCHEN_TABLE_NAME, type Hole } from '@golfwars/courses';
 import {
+  BALANCE,
   GADGET_INFO,
   GolfSim,
   NO_ENV,
@@ -819,6 +820,12 @@ export class OnlineGame {
       /** Sends a test-hook message (only honoured by a server started with GOLFWARS_CHEATS=1). */
       cheat: (k: string) => this.conn?.send('cheat', { k }),
       /** Test hook: give yourself a gadget / stand beside crate `i` (dx metres along x). */
+      tp: (x: number, z: number, yaw = 0) => this.conn?.send('cheat', { k: 'tp', x, z, yaw }),
+      ballAt: (x: number, z: number) => this.conn?.send('cheat', { k: 'ballat', x, z }),
+      shootBall: (yaw: number, power: number) =>
+        this.conn?.send('cheat', { k: 'shoot', yaw, power }),
+      effects: () => this.latest?.effects ?? [],
+      balance: () => ({ fanDuration: BALANCE.gadgets.fan.duration }),
       giveGadget: (g: string) => this.conn?.send('cheat', { k: 'gadget', g }),
       toCrate: (i: number, dx = 0) => this.conn?.send('cheat', { k: 'crate', i, dx }),
       gadget: () => this.latest?.gadget ?? null,
