@@ -255,7 +255,7 @@
   position: fixed;
   top: 44px;
   right: 8px;
-  min-width: 190px;
+  min-width: 230px;
   padding: 6px 10px 8px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.55);
@@ -267,8 +267,10 @@
   display: none;
 }
 #leaderboard .lb-head {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr 50px 38px;
+  gap: 6px;
+  text-align: right;
   opacity: 0.65;
   font-size: 11px;
   text-transform: uppercase;
@@ -277,7 +279,7 @@
 }
 #leaderboard .lb-row {
   display: grid;
-  grid-template-columns: 12px 1fr 28px 18px 34px;
+  grid-template-columns: 14px 12px 1fr 50px 38px;
   gap: 6px;
   align-items: center;
   padding: 1px 0;
@@ -287,6 +289,18 @@
 }
 #leaderboard .lb-row.away {
   opacity: 0.5;
+}
+#leaderboard .lb-head span:first-child {
+  text-align: left;
+}
+#leaderboard .rk {
+  opacity: 0.7;
+  text-align: right;
+  font-size: 11px;
+}
+#leaderboard .hole {
+  text-align: right;
+  opacity: 0.85;
 }
 #leaderboard .dot {
   width: 10px;
@@ -301,9 +315,10 @@
 #leaderboard .num {
   text-align: right;
 }
-#leaderboard .ok {
+#leaderboard .hole.ok {
   color: #8f8;
   font-weight: 800;
+  opacity: 1;
 }
 
 /* End-of-match scoreboard. */
@@ -340,7 +355,9 @@
   text-align: right;
 }
 #match-board th:first-child,
-#match-board td:first-child {
+#match-board td:first-child,
+#match-board th:nth-child(2),
+#match-board td:nth-child(2) {
   text-align: left;
 }
 #match-board th {
@@ -386,6 +403,141 @@
   opacity: 0.7;
   font-size: 14px;
 }
+#match-board button.alt {
+  background: #5b6b7a;
+}
+#match-board button.on {
+  background: #2f7d5c;
+  box-shadow: 0 0 0 2px #9fe8c4 inset;
+}
+#match-board .tally {
+  margin-top: 12px;
+  font-size: 14px;
+  opacity: 0.85;
+}
+#match-board tr.me td {
+  background: rgba(255, 255, 255, 0.08);
+}
+#match-board tr.par td {
+  opacity: 0.6;
+  font-size: 14px;
+}
+#match-board td.nm {
+  white-space: nowrap;
+}
+#match-board .podium {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 4px 0 16px;
+  min-height: 170px;
+}
+#match-board .podium .step {
+  width: 130px;
+  text-align: center;
+}
+#match-board .podium .who {
+  font-weight: 700;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#match-board .podium .pts {
+  font-size: 13px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+#match-board .podium .block {
+  border-radius: 8px 8px 0 0;
+  font-size: 30px;
+  font-weight: 800;
+  padding-top: 8px;
+  color: #3a2a00;
+}
+#match-board .podium .p1 .block {
+  height: 96px;
+  background: linear-gradient(#ffe27a, #e0b43a);
+}
+#match-board .podium .p2 .block {
+  height: 68px;
+  background: linear-gradient(#e8edf2, #aab4bf);
+}
+#match-board .podium .p3 .block {
+  height: 46px;
+  background: linear-gradient(#e6b27c, #b57a43);
+}
+
+/* Per-hole results (hole-end phase). */
+#hole-results {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 460px;
+  max-width: 92vw;
+  padding: 18px 28px 20px;
+  border-radius: 16px;
+  background: rgba(20, 30, 40, 0.9);
+  color: #fff;
+  text-align: center;
+  z-index: 14;
+  pointer-events: none;
+}
+#hole-results[hidden] {
+  display: none;
+}
+#hole-results h2 {
+  margin: 0 0 2px;
+  font-size: 26px;
+}
+#hole-results .sub {
+  font-size: 13px;
+  opacity: 0.7;
+  margin-bottom: 10px;
+}
+#hole-results table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 17px;
+}
+#hole-results th,
+#hole-results td {
+  padding: 5px 9px;
+  text-align: right;
+}
+#hole-results th:nth-child(2),
+#hole-results td:nth-child(2) {
+  text-align: left;
+}
+#hole-results th {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  opacity: 0.75;
+}
+#hole-results tr.first td {
+  color: #ffe27a;
+  font-weight: 700;
+}
+#hole-results td.bonus {
+  color: #8f8;
+}
+#hole-results td.tot {
+  font-weight: 700;
+}
+#hole-results .dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+#hole-results .next {
+  margin-top: 10px;
+  font-size: 14px;
+  opacity: 0.8;
+}
 
 /* F3 netcode panel. */
 #net-panel {
@@ -425,4 +577,64 @@
 #net-panel b {
   color: #9f9;
   font-weight: 600;
+}
+
+/* Gadget slot (HUD, bottom left). */
+#hud-gadget {
+  position: absolute;
+  left: 8px;
+  bottom: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 230px;
+  max-width: 330px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.58);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+}
+#hud-gadget.empty {
+  opacity: 0.7;
+  border-style: dashed;
+}
+#hud-gadget .icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+}
+#hud-gadget .name {
+  font-weight: 700;
+  font-size: 16px;
+}
+#hud-gadget .hint {
+  font-size: 12px;
+  opacity: 0.8;
+  line-height: 1.25;
+}
+#hud-gadget .keycap {
+  flex: none;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  line-height: 26px;
+  text-align: center;
+  font-weight: 800;
+  border-radius: 6px;
+  background: #fff;
+  color: #222;
+  box-shadow: 0 2px 0 #999;
+}
+#hud-gadget:not(.empty) {
+  animation: gadget-pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes gadget-pulse {
+  from {
+    box-shadow: 0 0 0 0 rgba(255, 226, 122, 0);
+  }
+  to {
+    box-shadow: 0 0 14px 2px rgba(255, 226, 122, 0.7);
+  }
 }

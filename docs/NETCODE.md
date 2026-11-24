@@ -1,4 +1,4 @@
-# Netcode (M3)
+# Netcode (M3, extended in M4)
 
 Server-authoritative, up to 8 players per room, over Colyseus 0.16 WebSockets. Source: `packages/shared/src/{match,net}`, `apps/server/src/GolfRoom.ts`, `apps/client/src/{onlineGame.ts,net/}`.
 
@@ -18,19 +18,27 @@ Each Windup walks in its own private course-only Rapier world on the server (a "
 | Type | Dir | Rate | Content |
 | --- | --- | --- | --- |
 | schema state | s->c | on change | Lobby + scores (`GolfState`/`PlayerState`: nickname, colour, ready, host, connected, strokes, holed, per-hole scores, match phase, hole index, whole-second timer). Not delayed by the lag simulator |
-| `in` | c->s | 30 Hz (2 ticks per packet, at once on a shot/swing) | `{seq, tick, e: [[moveX, moveZ, camYaw, flags, aimYaw\|null, shot?], ...]}`; entry `i` is tick `seq+i`; flags = sprint 1, jump 2, swing 4; `shot = [aimYaw, fineAim, power]`; `tick` = the server tick the sender's screen was showing |
+| `in` | c->s | 30 Hz (2 ticks per packet, at once on a shot/swing) | `{seq, tick, e: [[moveX, moveZ, camYaw, flags, aimYaw\|null, shot?], ...]}`; entry `i` is tick `seq+i`; flags = sprint 1, jump 2, swing 4, use gadget 8; `shot = [aimYaw, fineAim, power]`; `tick` = the server tick the sender's screen was showing |
 | `S` | s->c | 20 Hz (every 3rd tick) | Binary snapshot, per client (see below) |
-| `ev` | s->c | on event | `[{k:'shot'\|'oob'\|'holed'\|'bonk'\|'fell'\|'timeout'\|'hole', ...}]` |
+| `ev` | s->c | on event | `[{k:'shot'\|'oob'\|'holed'{r place, b bonus}\|'bonk'\|'fell'\|'timeout'\|'hole'\|'pickup'\|'use'\|'trap'\|'stick', ...}]` |
 | `ping` / `pong` | both | 1 Hz | `{t}` / `{t, tick}` for RTT and a server tick estimate |
-| `nick color ready start rematch` | c->s | rare | Lobby actions (host only: `start`, `rematch`) |
+| `nick color ready start` | c->s | rare | Lobby actions (host only: `start`) |
+| `rematch` / `rvote` | c->s / s->c | rare | After the podium: `rematch {mode:'again'\|'lobby'}` (host decides; `rvote` relays the vote tally) |
+| `balance` | s->c | dev only, on join and on file change | The current `BALANCE` override JSON (see docs/GADGETS.md). Never sent in production |
 
-**Snapshot `S`** (big-endian): `u32 tick, u8 hole, u8 phase|hasOwn|keyframe, u32 ack`, then the receiver's own full Windup state (53 B + hit ids: float32 position, velocity, yaw, coyote, key, bonk timers), then per player `u8 slot|flags`, status, yaw, anim, key and (only if changed since the last snapshot to this client, or on a keyframe every 2 s) the Windup and ball positions as 3 x int16 at 1/128 m. Ball rotation is derived client-side from its velocity.
+**Snapshot `S`** (big-endian, protocol version 3): `u32 tick, u8 hole, u8 phase|hasOwn|keyframe|hasEffects (bit 3), u32 ack, u8 crate mask, u8 own gadget id`, then the receiver's own full Windup state (53 B + hit ids: float32 position, velocity, yaw, coyote, key, bonk timers), then per player `u8 slot|flags`, status, yaw, anim, key and (only if changed since the last snapshot to this client, or on a keyframe every 2 s) the Windup and ball positions as 3 x int16 at 1/128 m. Ball rotation is derived client-side from its velocity. Ball phases include `trapped` (Bubble Wand). Match phases are lobby, hole-intro, playing, hole-end, results.
+
+**Effects block** (only when the active gadget effects changed, or on a keyframe): `u8 n`, then 13 B per effect: kind+owner byte, id, position as 3 x int16 (1/128 m), yaw u8, `u32 endTick`. Bubbles are interpolated by `sampleEffects`; gum patches, fans and magnets are static, so the client only needs their position and end tick.
 
 Input validation: every number is checked finite and clamped, packets over 12 entries or malformed are dropped, more than 120 packets/s are ignored, the per-player queue is capped at 60 and consumed one input per tick (2 or 3 to catch up after a jitter burst, paid from a credit bucket so a speed hack cannot run faster than real time). An empty queue means the player's Windup is simply not stepped that tick.
 
 ## Prediction and reconciliation (own Windup)
 
 The client applies each input immediately (`Predictor.step`) and keeps unacked inputs by sequence number. A snapshot carries `ack` (last input the server applied) and the Windup state after it; the client rewinds to that state (`Windup.setState`), replays the unacked inputs, and measures how far the result moved. Errors below 1.5 m are smoothed away over ~100 ms by a visual offset (`VisualSmoother`); larger ones (respawn) snap. Without bonks the error is exactly 0 (tested at 150 ms RTT). The client ignores its own `fell` event; the server respawns the Windup.
+
+### Gadget effects and prediction
+
+Gadget logic runs only on the server (`GadgetEffects`); the use request is the `gadget` input flag, validated there (owns a gadget, not frozen or toppled, cooldown). Effects on a Windup are applied through a `WindupEnv {speedScale, drift}` passed into `Windup.step`. **Gum** slowing is predicted by the client: patches come in snapshots and are quantised to 1/128 m on both sides, so replay matches the server. **Fan** wind is deliberately not predicted (it would need exact timing of someone else's input); it appears as reconciliation errors that the visual smoother hides. Effects on balls (trap, push, pull, stop) are applied before the world step and the client only interpolates the result.
 
 ## Everything else: interpolation
 
@@ -45,12 +53,14 @@ Remote Windups and all balls are drawn ~100 ms (6 ticks) behind the newest data.
 
 `LagSim` wraps every non-schema message in both directions: delay = RTT/2 +- jitter; a "lost" message is retransmitted after max(200 ms, 1.5 RTT) (WebSocket is reliable, so loss is delay, never a drop; repeat losses up to 4x); delivery is in order per direction (a late message blocks the ones behind it, like TCP). Unit-tested in `net.test.ts`.
 
-## Bandwidth and CPU (`pnpm --filter @golfwars/server bench -- 8 15`, bots over real WebSockets)
+## Bandwidth and CPU (`pnpm --filter @golfwars/server bench 8 15`, add a third argument `gadgets` to give bots gadgets, bots over real WebSockets)
 
 | Players | Snapshots per client | All server->client bytes | Server tick (avg / max) |
 | --- | --- | --- | --- |
 | 2 | 1.66 KB/s, 18.8/s | 1.73 KB/s | 0.38 ms / 2.6 ms (2.3% of a 16.7 ms tick) |
 | 8 | 2.90 KB/s, 19.2/s | 3.01 KB/s | 0.54 ms / 4.3 ms (3.2%) |
+| 8 (M4 build) | 2.79 KB/s | 2.89 KB/s | 0.45 ms / 2.8 ms (2.7%) |
+| 8 (M4, bots using gadgets) | 3.45 KB/s | 3.57 KB/s | 0.60 ms / 9.1 ms (3.6%) |
 
 Payload bytes (WebSocket framing adds about 4 bytes per message, so ~+0.1 KB/s). A full 8-player keyframe is under 250 bytes. Client -> server is about 30 packets/s of ~50 bytes.
 
@@ -62,3 +72,4 @@ Payload bytes (WebSocket framing adds about 4 bytes per message, so ~+0.1 KB/s).
 - Lag-compensation rewind is capped at 150 ms, so at 150 ms RTT a bonk on a fast-running target can still miss a little.
 - Rooms live in one server process; room codes are unique per process only. The free Render tier sleeps after inactivity (first connect takes 30-60 s).
 - One map ("Kitchen Table", 3 holes); matches cannot be joined once started (only reconnected into).
+- Fan wind is not predicted, so a Windup caught in a fan shows small smoothed corrections.

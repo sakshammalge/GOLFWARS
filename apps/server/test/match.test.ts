@@ -1,12 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { matchMaker } from '@colyseus/core';
-import {
-  MATCH,
-  MessageType,
-  NO_INPUT,
-  STEP_DT,
-  type Snapshot,
-} from '@golfwars/shared';
+import { MATCH, MessageType, NO_INPUT, STEP_DT, type Snapshot } from '@golfwars/shared';
 import { KITCHEN_TABLE } from '@golfwars/courses';
 import { createGameServer, type GameServer } from '../src/server.js';
 import type { GolfRoom } from '../src/GolfRoom.js';
@@ -147,10 +141,13 @@ describe('match over the network (T3.4a)', () => {
     await waitFor(() => a.state.matchPhase === 'playing', 'hole 3 playing');
     await holeOut(a);
     await holeOut(b);
-    await waitFor(() => a.state.matchPhase === 'finished', 'finished');
+    await waitFor(() => a.state.matchPhase === 'results', 'results');
     expect(Array.from(a.me.scores)).toEqual([1, 1, 1]);
-    expect(a.me.total).toBe(3);
-    expect(b.me.total).toBe(1 + KITCHEN_TABLE[1]!.par + 3 + 1);
+    // A holed out first on every hole (-2 each): 3 strokes - 6. B was second on holes 1 and 3 (-1)
+    // and timed out on hole 2 (par + 3, no bonus): 1 - 1 + (par + 3) + 1 - 1.
+    expect(Array.from(a.me.bonus)).toEqual([-2, -2, -2]);
+    expect(a.me.total).toBe(-3);
+    expect(b.me.total).toBe(KITCHEN_TABLE[1]!.par + 3);
     // Host sends everyone back to the lobby.
     a.room.send(MessageType.Rematch);
     await waitFor(() => a.state.phase === 'lobby' && b.state.phase === 'lobby', 'back to lobby');
@@ -168,6 +165,84 @@ describe('match over the network (T3.4a)', () => {
     expect(ticks).toBeGreaterThan(50);
     expect(ticks).toBeLessThan(70);
     expect(room.stats.totalMs / room.stats.ticks).toBeLessThan(STEP_DT * 1000 * 0.5);
+    await a.close();
+    await b.close();
+  });
+});
+
+describe('match rules and rematch (T4.1, T4.2)', () => {
+  /** Both players hole out on every hole (A first), until the results screen. */
+  async function playToResults(a: TestClient, b: TestClient): Promise<void> {
+    const room = roomOf(a);
+    for (let h = 0; h < KITCHEN_TABLE.length; h++) {
+      await waitFor(() => a.state.matchPhase === 'playing' && a.state.holeIndex === h, `hole ${h}`);
+      for (const c of [a, b]) {
+        const cup = room.matchSim!.hole.cup.position;
+        room.matchSim!.ballOf(c.me.slot)!.teleport([cup[0], cup[1] + 0.2, cup[2]]);
+        await waitFor(() => c.me.holed, 'holed');
+      }
+    }
+    await waitFor(() => a.state.matchPhase === 'results', 'results');
+  }
+
+  it('shows finish order live, scores bonuses per hole, and refuses late joiners mid-match', async () => {
+    const [a, b] = await startTwo();
+    const room = roomOf(a);
+    const cup = room.matchSim!.hole.cup.position;
+    room.matchSim!.ballOf(b.me.slot)!.teleport([cup[0], cup[1] + 0.2, cup[2]]);
+    await waitFor(() => b.me.holed, 'B holed first');
+    expect(b.me.finish).toBe(1);
+    expect(a.me.finish).toBe(0);
+    await expect(TestClient.join(url, a.room.roomId, { nickname: 'Late' })).rejects.toThrow();
+    room.matchSim!.ballOf(a.me.slot)!.teleport([cup[0], cup[1] + 0.2, cup[2]]);
+    await waitFor(() => a.me.holed, 'A holed');
+    expect(a.me.finish).toBe(2);
+    await waitFor(() => a.state.matchPhase === 'hole-end', 'hole end');
+    expect(Array.from(b.me.bonus)).toEqual([-2]);
+    expect(Array.from(a.me.bonus)).toEqual([-1]);
+    expect(Array.from(b.me.places)).toEqual([1]);
+    expect(Array.from(a.me.places)).toEqual([2]);
+    await a.close();
+    await b.close();
+  });
+
+  it('results -> rematch vote -> host restarts with the same players and a clean scorecard', async () => {
+    const [a, b] = await startTwo();
+    await playToResults(a, b);
+    // Only the host may restart.
+    b.room.send(MessageType.Rematch, { mode: 'again' });
+    await sleep(150);
+    expect(a.state.matchPhase).toBe('results');
+    b.room.send(MessageType.RematchVote, { v: true });
+    await waitFor(() => a.state.players.get(b.sessionId).vote === true, 'vote visible to everyone');
+    a.room.send(MessageType.Rematch, { mode: 'again' });
+    await waitFor(() => a.state.matchPhase === 'hole-intro' && a.state.holeIndex === 0, 'restart');
+    expect(a.state.phase).toBe('match');
+    expect(a.me.total).toBe(0);
+    expect(a.me.scores.length).toBe(0);
+    expect(b.me.vote).toBe(false);
+    expect(a.state.players.size).toBe(2);
+    await waitFor(() => a.state.matchPhase === 'playing', 'second match playing');
+    await a.close();
+    await b.close();
+  });
+
+  it('host can send everyone back to the lobby from the results', async () => {
+    const [a, b] = await startTwo();
+    await playToResults(a, b);
+    a.room.send(MessageType.Rematch, { mode: 'lobby' });
+    await waitFor(() => a.state.phase === 'lobby' && b.state.phase === 'lobby', 'lobby');
+    expect(a.me.ready).toBe(false);
+    await a.close();
+    await b.close();
+  });
+
+  it('ignores rematch before the results', async () => {
+    const [a, b] = await startTwo();
+    a.room.send(MessageType.Rematch, { mode: 'again' });
+    await sleep(150);
+    expect(a.state.phase).toBe('match');
+    expect(a.state.matchPhase).toBe('playing');
     await a.close();
     await b.close();
   });

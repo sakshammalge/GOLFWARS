@@ -1,4 +1,5 @@
-import { formatToPar, type Scorecard } from '@golfwars/shared';
+import { GADGET_INFO, formatToPar, type GadgetType, type Scorecard } from '@golfwars/shared';
+import { gadgetIcon } from './ui/gadgetIcons.js';
 
 /** Plain DOM overlay: stroke counter, power meter, toasts, banners and the scorecard. */
 export class Hud {
@@ -14,6 +15,8 @@ export class Hud {
   private readonly toast = document.createElement('div');
   private readonly banner = document.createElement('div');
   private readonly card = document.createElement('div');
+  private readonly gadget = document.createElement('div');
+  private gadgetShown: GadgetType | null | undefined = undefined;
   private toastTimer = 0;
 
   constructor() {
@@ -41,14 +44,17 @@ export class Hud {
     this.banner.hidden = true;
     this.card.id = 'scorecard';
     this.card.hidden = true;
+    this.gadget.id = 'hud-gadget';
+    this.setGadget(null);
 
     const hint = document.createElement('div');
     hint.id = 'hud-hint';
     hint.textContent =
-      'WASD run  |  Shift sprint  |  Space jump  |  Hold LEFT MOUSE next to your ball to charge, release to hit  |  Right-click or F: bonk  |  Q/E or right-drag: camera  |  Arrows: fine aim  |  F3: debug';
+      'WASD run  |  Shift sprint  |  Space jump  |  Hold LEFT MOUSE next to your ball to charge, release to hit  |  Right-click or F: bonk  |  Q: use gadget  |  Z/C or right-drag: camera  |  Arrows: fine aim  |  F3: debug';
     this.root.append(
       this.strokes,
       this.keyBox,
+      this.gadget,
       this.toast,
       this.banner,
       this.prompt,
@@ -57,6 +63,29 @@ export class Hud {
       this.card,
     );
     document.body.appendChild(this.root);
+  }
+
+  /** The one-slot gadget inventory: icon, name and the Q key hint (null = empty slot). */
+  setGadget(g: GadgetType | null): void {
+    if (g === this.gadgetShown) return;
+    this.gadgetShown = g;
+    this.gadget.classList.toggle('empty', g === null);
+    const label = document.createElement('div');
+    label.className = 'label';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = g ? GADGET_INFO[g].name : 'No gadget';
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = g ? GADGET_INFO[g].blurb : 'Walk into a ? crate on a side path';
+    label.append(name, hint);
+    const key = document.createElement('div');
+    key.className = 'keycap';
+    key.textContent = 'Q';
+    const icon = document.createElement('div');
+    icon.className = 'icon';
+    if (g) icon.append(gadgetIcon(g));
+    this.gadget.replaceChildren(icon, label, ...(g ? [key] : []));
   }
 
   setVisible(visible: boolean): void {

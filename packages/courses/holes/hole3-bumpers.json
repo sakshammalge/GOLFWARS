@@ -34,20 +34,6 @@
     },
     {
       "type": "wall",
-      "position": [-3.15, 0.3, -1],
-      "rotation": 0,
-      "size": [0.3, 0.6, 16.3],
-      "surface": "wood"
-    },
-    {
-      "type": "wall",
-      "position": [3.15, 0.3, -1],
-      "rotation": 0,
-      "size": [0.3, 0.6, 16.3],
-      "surface": "wood"
-    },
-    {
-      "type": "wall",
       "position": [0, 0.3, 7.15],
       "rotation": 0,
       "size": [6.6, 0.6, 0.3],
@@ -115,6 +101,100 @@
       "rotation": 0,
       "size": [0.4, 1.2, 0.4],
       "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [3.15, 0.3, -3.225],
+      "rotation": 0,
+      "size": [0.3, 0.6, 11.85],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [3.15, 0.3, 5.725],
+      "rotation": 0,
+      "size": [0.3, 0.6, 2.85],
+      "surface": "wood"
+    },
+    {
+      "type": "floor",
+      "position": [4.6, -0.2, 3.5],
+      "rotation": 0,
+      "size": [3.2, 0.4, 1.6],
+      "surface": "felt"
+    },
+    {
+      "type": "wall",
+      "position": [4.825, 0.3, 2.55],
+      "rotation": 0,
+      "size": [3.05, 0.6, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [4.825, 0.3, 4.45],
+      "rotation": 0,
+      "size": [3.05, 0.6, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [6.2, 0.3, 3.5],
+      "rotation": 0,
+      "size": [0.3, 0.6, 2.2],
+      "surface": "wood"
+    },
+    {
+      "type": "crate",
+      "position": [5.3, 0.3, 3.5],
+      "rotation": 0
+    },
+    {
+      "type": "wall",
+      "position": [-3.15, 0.3, -7.675],
+      "rotation": 0,
+      "size": [0.3, 0.6, 2.95],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-3.15, 0.3, 1.275],
+      "rotation": 0,
+      "size": [0.3, 0.6, 11.75],
+      "surface": "wood"
+    },
+    {
+      "type": "floor",
+      "position": [-4.6, -0.2, -5.4],
+      "rotation": 0,
+      "size": [3.2, 0.4, 1.6],
+      "surface": "felt"
+    },
+    {
+      "type": "wall",
+      "position": [-4.825, 0.3, -6.35],
+      "rotation": 0,
+      "size": [3.05, 0.6, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-4.825, 0.3, -4.45],
+      "rotation": 0,
+      "size": [3.05, 0.6, 0.3],
+      "surface": "wood"
+    },
+    {
+      "type": "wall",
+      "position": [-6.2, 0.3, -5.4],
+      "rotation": 0,
+      "size": [0.3, 0.6, 2.2],
+      "surface": "wood"
+    },
+    {
+      "type": "crate",
+      "position": [-5.3, 0.3, -5.4],
+      "rotation": 0
     }
   ],
   "cup": {

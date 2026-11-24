@@ -14,6 +14,9 @@ function sample(tick: number, x = 1.234): Snapshot {
     holeIndex: 1,
     phase: 'playing',
     ack: 77,
+    crates: 0b101,
+    gadget: 'fan',
+    effects: [],
     own: {
       feet: [x, 0.5, -2],
       vel: [1, 0, 2],
@@ -48,6 +51,8 @@ describe('snapshot codec', () => {
     expect(d.holeIndex).toBe(1);
     expect(d.phase).toBe('playing');
     expect(d.ack).toBe(77);
+    expect(d.crates).toBe(0b101);
+    expect(d.gadget).toBe('fan');
     expect(d.own!.feet[0]).toBeCloseTo(1.234, 5);
     expect(d.own!.bonk.hit).toEqual([3, 5]);
     expect(d.own!.bonk.swingT).toBeCloseTo(0.2, 5);
@@ -96,5 +101,57 @@ describe('snapshot codec', () => {
     const d = dec.decode(full);
     expect(d.players).toHaveLength(8);
     m.dispose();
+  });
+});
+
+describe('gadget effects in snapshots', () => {
+  const fan = {
+    id: 3,
+    kind: 'fan' as const,
+    owner: 5,
+    pos: [1.5, 0, -2.25] as [number, number, number],
+    yaw: 1,
+    endTick: 70000,
+  };
+  const bubble = { ...fan, id: 4, kind: 'bubble' as const, owner: 2 };
+
+  it('round-trips effects and the trapped ball phase', () => {
+    const enc = new SnapshotEncoder();
+    const dec = new SnapshotDecoder();
+    const s = sample(10);
+    s.effects = [fan, bubble];
+    s.players[0]!.ball.phase = 'trapped';
+    const d = dec.decode(enc.encode(s));
+    expect(d.effects).toHaveLength(2);
+    expect(d.effects[0]).toMatchObject({ id: 3, kind: 'fan', owner: 5, endTick: 70000 });
+    expect(d.effects[0]!.pos[0]).toBeCloseTo(1.5, 2);
+    expect(d.effects[0]!.yaw).toBeCloseTo(1, 1);
+    expect(d.effects[1]).toMatchObject({ kind: 'bubble', owner: 2 });
+    expect(d.players[0]!.ball.phase).toBe('trapped');
+  });
+
+  it('only resends an unchanged effect list on keyframes, and a change or an end is sent at once', () => {
+    const enc = new SnapshotEncoder(40);
+    const dec = new SnapshotDecoder();
+    const withFan = (tick: number): Snapshot => ({ ...sample(tick), effects: [fan] });
+    const first = enc.encode(withFan(1));
+    const second = enc.encode(withFan(2));
+    expect(second.length).toBeLessThan(first.length - 13); // no effect block, no positions
+    dec.decode(first);
+    expect(dec.decode(second).effects).toHaveLength(1); // the decoder keeps the last list
+    const moved = enc.encode({ ...sample(3), effects: [{ ...fan, pos: [2, 0, -2.25] }] });
+    expect(dec.decode(moved).effects[0]!.pos[0]).toBeCloseTo(2, 2);
+    const ended = enc.encode({ ...sample(4), effects: [] });
+    expect(dec.decode(ended).effects).toHaveLength(0);
+    expect(dec.decode(enc.encode({ ...sample(5), effects: [] })).effects).toHaveLength(0);
+  });
+
+  it('a fresh client (reset) gets the list again', () => {
+    const enc = new SnapshotEncoder(1000);
+    enc.encode({ ...sample(1), effects: [fan] });
+    enc.encode({ ...sample(2), effects: [fan] });
+    enc.reset();
+    const dec = new SnapshotDecoder();
+    expect(dec.decode(enc.encode({ ...sample(3), effects: [fan] })).effects).toHaveLength(1);
   });
 });

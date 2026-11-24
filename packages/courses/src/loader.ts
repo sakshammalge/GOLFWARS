@@ -39,6 +39,8 @@ export interface LoadedHole {
    * it, Windups walk around it); how close you must stand to rewind is a shared gameplay number.
    */
   windingPosts: Vec3[];
+  /** Gadget crate centres in hole order (crate pieces have no collider; the sim checks proximity). */
+  crates: Vec3[];
 }
 
 /**
@@ -49,8 +51,13 @@ export function loadHoleIntoWorld(world: World, hole: Hole, opts: LoadOptions): 
   const surfaceByCollider = new Map<number, Surface>();
   let cupSensor: Collider | null = null;
   const windingPosts: Vec3[] = [];
+  const crates: Vec3[] = [];
 
   for (const piece of hole.pieces) {
+    if (piece.type === 'crate') {
+      crates.push([...piece.position]);
+      continue;
+    }
     const surface = resolveSurface(piece);
     const mat = opts.surfaces[surface];
     const restitution =
@@ -111,6 +118,7 @@ export function loadHoleIntoWorld(world: World, hole: Hole, opts: LoadOptions): 
     tee: [...hole.tee],
     cup: [...hole.cup.position],
     windingPosts,
+    crates,
   };
 }
 

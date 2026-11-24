@@ -16,6 +16,7 @@
     "e2e:m1": "node tools/e2e-m1.mjs",
     "e2e:m2": "node tools/e2e-m2.mjs",
     "e2e:m3": "node tools/e2e-m3.mjs",
+    "e2e:m4": "node tools/e2e-m4.mjs",
     "lint": "eslint .",
     "typecheck": "pnpm build:libs && pnpm -r typecheck",
     "format": "prettier --write ."

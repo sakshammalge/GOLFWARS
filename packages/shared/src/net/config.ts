@@ -57,7 +57,7 @@ export interface MatchConfig {
 
 export const MATCH: MatchConfig = {
   introSeconds: 3,
-  holeEndSeconds: 4,
+  holeEndSeconds: 5,
   holeTimeSeconds: 90,
   timeoutExtraStrokes: 3,
 };

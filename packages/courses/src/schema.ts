@@ -4,7 +4,15 @@ export const SURFACES = ['felt', 'wood', 'sugar'] as const;
 /** felt = normal, wood = fast, sugar = slow and sandy. */
 export type Surface = (typeof SURFACES)[number];
 
-export const PIECE_TYPES = ['floor', 'wall', 'ramp', 'cup', 'bumper', 'windingPost'] as const;
+export const PIECE_TYPES = [
+  'floor',
+  'wall',
+  'ramp',
+  'cup',
+  'bumper',
+  'windingPost',
+  'crate',
+] as const;
 export type PieceType = (typeof PIECE_TYPES)[number];
 
 export type Vec3 = [number, number, number];
@@ -26,7 +34,9 @@ export const pieceSchema = z.object({
   /**
    * Full extents [x, y, z] before rotation. Boxes: width, thickness, length. Ramps: width,
    * thickness, slope length (along local +z, which is the uphill end). Bumpers and winding
-   * posts: [diameter, height, diameter] (x is the diameter). Defaults per type: see `DEFAULT_SIZES`.
+   * posts: [diameter, height, diameter] (x is the diameter). Crates are gadget crates: a pickup
+   * with no collider, `position` is the centre of the box (rest it on a floor). Defaults per type:
+   * see `DEFAULT_SIZES`.
    */
   size: size3.optional(),
   /** Defaults to felt for floor/ramp/cup and wood for wall/bumper. */
@@ -58,6 +68,14 @@ export const holeSchema = z
         message: `a hole needs exactly one cup piece (found ${cups.length})`,
       });
     }
+    const crates = hole.pieces.filter((p) => p.type === 'crate').length;
+    if (crates > MAX_CRATES_PER_HOLE) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['pieces'],
+        message: `a hole can have at most ${MAX_CRATES_PER_HOLE} crates (found ${crates})`,
+      });
+    }
     hole.pieces.forEach((p, i) => {
       if (p.type !== 'cup') return;
       const [w, h, d] = resolveSize(p);
@@ -77,6 +95,9 @@ export type Hole = z.output<typeof holeSchema>;
 export const CUP_HOLE_SIZE = 0.6;
 export const CUP_PIT_DEPTH = 0.3;
 
+/** The snapshot carries the available crates as one byte, so a hole has at most 8. */
+export const MAX_CRATES_PER_HOLE = 8;
+
 export const DEFAULT_SIZES: Record<PieceType, Vec3> = {
   floor: [4, 0.4, 4],
   wall: [4, 0.5, 0.3],
@@ -84,6 +105,7 @@ export const DEFAULT_SIZES: Record<PieceType, Vec3> = {
   cup: [2, 0.4, 2],
   bumper: [0.8, 0.6, 0.8],
   windingPost: [0.4, 1.2, 0.4],
+  crate: [0.6, 0.6, 0.6],
 };
 
 export const DEFAULT_SLOPE_DEG = 12;

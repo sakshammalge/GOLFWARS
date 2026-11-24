@@ -2,14 +2,21 @@ import { createBonk } from '../character/bonk.js';
 import type { WindupState, WindupStatus } from '../character/windup.js';
 import { createKey } from '../character/stamina.js';
 import type { BallPhase, Vec3 } from '../physics/golfSim.js';
+import {
+  GADGETS,
+  gadgetFromId,
+  gadgetId,
+  type GadgetType,
+  type NetEffect,
+} from '../gadgets/types.js';
 import { NET } from './config.js';
 
 /** Where the match is, as carried in every snapshot. */
-export const MATCH_PHASES = ['hole-intro', 'playing', 'hole-end', 'finished'] as const;
+export const MATCH_PHASES = ['hole-intro', 'playing', 'hole-end', 'results'] as const;
 export type MatchPhase = (typeof MATCH_PHASES)[number];
 
 const STATUSES: readonly WindupStatus[] = ['idle', 'run', 'swing', 'topple', 'frozen'];
-const BALL_PHASES: readonly BallPhase[] = ['moving', 'resting', 'holed'];
+const BALL_PHASES: readonly BallPhase[] = ['moving', 'resting', 'holed', 'trapped'];
 
 /** What other players see of a Windup. */
 export interface NetWindup {
@@ -44,6 +51,12 @@ export interface Snapshot {
   ack: number;
   /** Full state of the receiving client's own Windup, for prediction. */
   own: WindupState | null;
+  /** Bit i set = crate i of the hole is available. */
+  crates: number;
+  /** The receiving player's held gadget. */
+  gadget: GadgetType | null;
+  /** Active gadget effects (bubbles, gum, fans, magnets). */
+  effects: NetEffect[];
   players: NetPlayer[];
 }
 
@@ -52,7 +65,7 @@ const q = (v: number): number => Math.max(-32768, Math.min(32767, Math.round(v *
 const TAU = Math.PI * 2;
 
 class Writer {
-  readonly buf = new Uint8Array(1024);
+  readonly buf = new Uint8Array(2048);
   private readonly dv = new DataView(this.buf.buffer);
   n = 0;
   u8(v: number): void {
@@ -137,6 +150,40 @@ function readOwn(r: Reader): WindupState {
   return { feet, vel, yaw, grounded: (flags & 1) !== 0, coyote, key, bonk };
 }
 
+const MAX_EFFECTS = 32;
+
+function writeEffects(w: Writer, effects: readonly NetEffect[]): void {
+  const list = effects.slice(0, MAX_EFFECTS);
+  w.u8(list.length);
+  for (const e of list) {
+    w.u8(GADGETS.indexOf(e.kind) | ((e.owner & 7) << 3));
+    w.u8(e.id);
+    for (const v of e.pos) w.i16(q(v));
+    w.u8(Math.round((((e.yaw % TAU) + TAU) % TAU) * (256 / TAU)));
+    w.u32(e.endTick);
+  }
+}
+
+function readEffects(r: Reader): NetEffect[] {
+  const n = r.u8();
+  const out: NetEffect[] = [];
+  for (let i = 0; i < n; i++) {
+    const b = r.u8();
+    const id = r.u8();
+    const pos: Vec3 = [r.i16() / POS, r.i16() / POS, r.i16() / POS];
+    const yaw = (r.u8() * TAU) / 256;
+    out.push({
+      id,
+      kind: GADGETS[b & 7] ?? 'bubble',
+      owner: (b >> 3) & 7,
+      pos,
+      yaw,
+      endTick: r.u32(),
+    });
+  }
+  return out;
+}
+
 /** Last quantised positions sent / received per slot; the basis of delta compression. */
 type Basis = Map<number, { w: [number, number, number]; b: [number, number, number] }>;
 
@@ -147,6 +194,9 @@ type Basis = Map<number, { w: [number, number, number]; b: [number, number, numb
  * snapshots everything is sent in full as a safety net. Layout:
  *
  *   u32 tick | u8 holeIndex | u8 phase(3 bits)+hasOwn(bit 6)+keyframe(bit 7) | u32 ack
+ *   u8 crate availability mask | u8 own gadget id (0 = none)
+ *   (header bit 3 = an effect list follows the players: u8 n, then per effect
+ *    u8 kind(3)+owner(3) | u8 id | 3 x i16 pos | u8 yaw | u32 endTick = 13 bytes)
  *   [own state: 12 f32 + flags + 4 f32 + hitCount + hit ids]    (only when hasOwn)
  *   u8 playerCount, then per player:
  *     u8 slot(3)+hasWindupPos(bit 3)+hasBallPos(bit 4)+ballPhase(bits 5-6)
@@ -155,6 +205,8 @@ type Basis = Map<number, { w: [number, number, number]; b: [number, number, numb
 export class SnapshotEncoder {
   private basis: Basis = new Map();
   private count = 0;
+  /** Wire form of the effect list last sent to this client ('' = none). */
+  private lastEffects = '';
 
   constructor(private readonly keyframeEvery = 40) {}
 
@@ -162,6 +214,7 @@ export class SnapshotEncoder {
   reset(): void {
     this.basis = new Map();
     this.count = 0;
+    this.lastEffects = '';
   }
 
   encode(s: Snapshot): Uint8Array {
@@ -169,8 +222,19 @@ export class SnapshotEncoder {
     const w = new Writer();
     w.u32(s.tick);
     w.u8(s.holeIndex);
-    w.u8(MATCH_PHASES.indexOf(s.phase) | (s.own ? 64 : 0) | (key ? 128 : 0));
+    // The effect list only rides along when it changed (a moving bubble changes it every snapshot;
+    // gum, fans and magnets are constant until they end), and on every keyframe.
+    const ew = new Writer();
+    writeEffects(ew, s.effects);
+    const effKey = s.effects.length === 0 ? '' : ew.bytes().join(',');
+    const sendEffects = key || effKey !== this.lastEffects;
+    this.lastEffects = effKey;
+    w.u8(
+      MATCH_PHASES.indexOf(s.phase) | (sendEffects ? 8 : 0) | (s.own ? 64 : 0) | (key ? 128 : 0),
+    );
     w.u32(s.ack);
+    w.u8(s.crates);
+    w.u8(gadgetId(s.gadget));
     if (s.own) writeOwn(w, s.own);
     w.u8(s.players.length);
     const next: Basis = new Map();
@@ -198,6 +262,7 @@ export class SnapshotEncoder {
       if (bChanged) for (const v of bq) w.i16(v);
       next.set(p.slot, { w: wq, b: bq });
     }
+    if (sendEffects) writeEffects(w, s.effects);
     this.basis = next;
     return w.bytes();
   }
@@ -206,9 +271,11 @@ export class SnapshotEncoder {
 /** Per-connection decoder matching `SnapshotEncoder`. */
 export class SnapshotDecoder {
   private last: Map<number, NetPlayer> = new Map();
+  private effects: NetEffect[] = [];
 
   reset(): void {
     this.last = new Map();
+    this.effects = [];
   }
 
   decode(bytes: Uint8Array): Snapshot {
@@ -218,6 +285,8 @@ export class SnapshotDecoder {
     const pf = r.u8();
     const phase = MATCH_PHASES[pf & 7] ?? 'playing';
     const ack = r.u32();
+    const crates = r.u8();
+    const gadget = gadgetFromId(r.u8());
     const own = pf & 64 ? readOwn(r) : null;
     const n = r.u8();
     const players: NetPlayer[] = [];
@@ -250,6 +319,7 @@ export class SnapshotDecoder {
       next.set(slot, p);
     }
     this.last = next;
-    return { tick, holeIndex, phase, ack, own, players };
+    if (pf & 8) this.effects = readEffects(r);
+    return { tick, holeIndex, phase, ack, own, crates, gadget, effects: this.effects, players };
   }
 }

@@ -11,9 +11,14 @@ import {
   RingGeometry,
   Vector3,
 } from 'three';
-import { KITCHEN_TABLE, type Hole } from '@golfwars/courses';
+import { KITCHEN_TABLE, KITCHEN_TABLE_NAME, type Hole } from '@golfwars/courses';
 import {
+  BALANCE,
+  GADGET_INFO,
   GolfSim,
+  NO_ENV,
+  gumScaleAt,
+  type WindupEnv,
   NET,
   NO_INPUT,
   PHYSICS,
@@ -24,8 +29,8 @@ import {
   Windup,
   Predictor,
   createCourseWorld,
-  holeEndText,
   holeIntroText,
+  ordinal,
   inBallReach,
   previewShot,
   toEntry,
@@ -41,12 +46,14 @@ import {
   type WindupInput,
 } from '@golfwars/shared';
 import { AimPreview } from './aimPreview.js';
-import { buildHoleMeshes } from './courseMeshes.js';
+import { buildHoleMeshes, type HoleGroup } from './courseMeshes.js';
+import { animateCrate } from './gadgetMeshes.js';
+import { GadgetFx } from './gadgetFx.js';
 import { Hud } from './hud.js';
 import type { Connection } from './net/connection.js';
 import type { Stage } from './scene.js';
 import { ShotControls } from './shotControls.js';
-import { Leaderboard, MatchBoard, readPlayers, type PlayerRow } from './ui/matchUi.js';
+import { HoleResults, Leaderboard, MatchBoard, readPlayers, type PlayerRow } from './ui/matchUi.js';
 import { Nameplates } from './ui/nameplates.js';
 import type { NetPanel } from './ui/netPanel.js';
 import { WindupModel } from './windupModel.js';
@@ -122,6 +129,7 @@ export class OnlineGame {
   private readonly controls: ShotControls;
   private readonly leaderboard = new Leaderboard();
   private readonly board = new MatchBoard();
+  private readonly results = new HoleResults();
   private readonly plates = new Nameplates();
   private readonly table = new Mesh(
     new BoxGeometry(120, 1, 120),
@@ -137,9 +145,10 @@ export class OnlineGame {
       side: DoubleSide,
     }),
   );
+  private readonly fx = new GadgetFx();
   private readonly smoother = new VisualSmoother();
   private readonly remotes = new Map<number, RemoteActor>();
-  private courseGroup: Group | null = null;
+  private courseGroup: HoleGroup | null = null;
 
   private active = false;
   private holeIndex = -1;
@@ -163,6 +172,7 @@ export class OnlineGame {
   private pendingShot: ShotTuple | null = null;
   private shotLockUntil = 0;
   private swingQueued = false;
+  private gadgetQueued = false;
   private sprintingNow = false;
 
   // Prediction error stats for the F3 panel.
@@ -178,11 +188,13 @@ export class OnlineGame {
   ) {
     this.table.receiveShadow = true;
     this.ring.rotation.x = -Math.PI / 2;
-    this.sceneGroup.add(this.table, this.ring, this.aim.object);
+    this.sceneGroup.add(this.table, this.ring, this.aim.object, this.fx.group);
     this.stage.scene.add(this.sceneGroup);
     this.stage.rig.onRightClick = () => (this.swingQueued = this.active);
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyF' && !e.repeat && this.active) this.swingQueued = true;
+      if (e.code === 'KeyQ' && !e.repeat && this.active && !(e.target instanceof HTMLInputElement))
+        this.gadgetQueued = true;
     });
     this.controls = new ShotControls(stage.renderer.domElement, stage.keys, {
       onShoot: (power, aimOffset) => this.shoot(power, aimOffset),
@@ -198,6 +210,7 @@ export class OnlineGame {
     this.conn = conn;
     conn.onSnapshot = (s) => this.onSnapshot(s);
     conn.onEvents = (e) => this.onEvents(e);
+    conn.onBalance = (r) => this.hud.showToast(`Balance reloaded (${r.applied.length} values)`);
   }
 
   // ------------------------------------------------------------- lifecycle
@@ -227,8 +240,10 @@ export class OnlineGame {
     this.sceneGroup.visible = false;
     this.leaderboard.hide();
     this.board.hide();
+    this.results.hide();
     this.plates.clear();
     this.disposeHole();
+    this.fx.clear();
     for (const r of this.remotes.values()) r.dispose();
     this.remotes.clear();
     this.controls.setEnabled(false);
@@ -267,14 +282,14 @@ export class OnlineGame {
     const windup = new Windup(this.slot, this.course.world, this.course.loaded, [0, 0, 0]);
     // Sequence numbers must keep counting across holes (the server drops old ones).
     if (this.predictor) this.predictor.replaceWindup(windup);
-    else this.predictor = new Predictor(windup);
+    else this.predictor = new Predictor(windup, (w) => this.windupEnv(w));
     this.windupLive = true;
     this.ownModel = new WindupModel(colorHex(this.myColor()));
     this.sceneGroup.add(this.ownModel.group);
     this.ready = false;
     this.smoother.reset();
 
-    this.courseGroup = buildHoleMeshes(hole);
+    this.courseGroup = buildHoleMeshes(hole, { crates: true });
     this.stage.scene.add(this.courseGroup);
     const b = this.course.loaded.bounds;
     this.table.position.set((b.minX + b.maxX) / 2, b.minY - 0.5 - 0.01, (b.minZ + b.maxZ) / 2);
@@ -292,6 +307,7 @@ export class OnlineGame {
         : (hole.startYaw * Math.PI) / 180;
     this.controls.resetAim();
     this.swingQueued = false;
+    this.gadgetQueued = false;
   }
 
   private myColor(): number {
@@ -309,31 +325,36 @@ export class OnlineGame {
     this.players = readPlayers(state);
     const holes = KITCHEN_TABLE;
     const pars = holes.map((h) => h.par);
-    this.leaderboard.update(this.players, this.conn.sessionId, pars);
+    this.leaderboard.update(this.players, this.conn.sessionId);
 
     const mp = state.matchPhase as MatchPhase;
     const idx = state.holeIndex as number;
     const hole = holes[idx] ?? holes[0]!;
-    const me = this.players.find((p) => p.slot === this.slot);
+    const left = state.timeLeft as number;
     if (mp === 'hole-intro') {
       this.hud.setBanner(
         holeIntroText({ holes, index: idx, phase: 'hole-intro', strokes: 0, results: [] }),
-        `Hole ${idx + 1} of ${holes.length}`,
+        `Hole ${idx + 1} of ${holes.length}  -  starting in ${left}`,
       );
-    } else if (mp === 'hole-end' && me) {
-      const strokes = me.scores[idx] ?? me.strokes;
-      this.hud.setBanner(holeEndText({ ...hole, strokes }), `${hole.name} complete`);
     } else {
       this.hud.setBanner(null);
     }
-    if (mp === 'finished') {
+    if (mp === 'hole-end') this.results.show(this.players, idx, hole.name, hole.par, left);
+    else this.results.hide();
+    if (mp === 'results') {
       this.board.show(
         this.players,
+        KITCHEN_TABLE_NAME,
         holes.map((h) => h.name),
         pars,
+        this.conn.sessionId,
         state.hostId === this.conn.sessionId,
-        () => this.conn.send('rematch'),
-        () => this.conn.leave(),
+        {
+          vote: (v) => this.conn.send('rvote', { v }),
+          again: () => this.conn.send('rematch', { mode: 'again' }),
+          lobby: () => this.conn.send('rematch', { mode: 'lobby' }),
+          leave: () => this.conn.leave(),
+        },
       );
     } else {
       this.board.hide();
@@ -408,16 +429,31 @@ export class OnlineGame {
           if (e.p === this.slot)
             this.hud.showToast('Fell off the table! Back to your ball (no penalty)');
           break;
-        case 'holed':
+        case 'holed': {
+          const bonus = e.b < 0 ? ` (${e.b} bonus)` : '';
           this.hud.showToast(
-            e.p === this.slot ? `You holed out in ${e.s}!` : `${name(e.p)} holed out in ${e.s}`,
+            e.p === this.slot
+              ? `You holed out in ${e.s} - ${ordinal(e.r)} to finish${bonus}!`
+              : `${name(e.p)} holed out in ${e.s} - ${ordinal(e.r)}${bonus}`,
           );
           break;
+        }
         case 'timeout':
           if (e.p === this.slot) this.hud.showToast("Time's up! Par + 3 for this hole");
           break;
         case 'shot':
           if (e.p !== this.slot) this.remotes.get(e.p)?.model.playShot();
+          break;
+        case 'pickup':
+          // Only the picker is told which gadget it got.
+          if (e.p === this.slot) this.hud.showToast(`${GADGET_INFO[e.g].name}! Press Q to use it`);
+          break;
+        case 'use':
+          this.hud.showToast(
+            e.p === this.slot
+              ? `You used the ${GADGET_INFO[e.g].name}`
+              : `${name(e.p)} used the ${GADGET_INFO[e.g].name}!`,
+          );
           break;
         default:
           break;
@@ -433,6 +469,7 @@ export class OnlineGame {
     const me = this.players.find((p) => p.slot === this.slot);
     if (this.phase !== 'playing' || me?.abandoned) {
       this.swingQueued = false;
+      this.gadgetQueued = false;
       return base;
     }
     const input: WindupInput = {
@@ -442,9 +479,11 @@ export class OnlineGame {
       sprint: k.isDown('ShiftLeft') || k.isDown('ShiftRight'),
       jump: k.isDown('Space'),
       swing: this.swingQueued,
+      gadget: this.gadgetQueued,
       aimYaw: this.controls.charging ? this.shootYaw(this.controls.aimOffset) : null,
     };
     this.swingQueued = false;
+    this.gadgetQueued = false;
     return input;
   }
 
@@ -493,7 +532,8 @@ export class OnlineGame {
     this.curPos = predictor.windup.position();
     // `fell` is the server's call (it respawns us next to the ball): ignore it locally.
     this.outbox.push({ seq, entry: toEntry(input, shot) });
-    if (this.outbox.length >= NET.input.clientBatchTicks || shot || input.swing) this.flush();
+    if (this.outbox.length >= NET.input.clientBatchTicks || shot || input.swing || input.gadget)
+      this.flush();
   }
 
   /** Sends the queued per-tick inputs as one packet. */
@@ -577,6 +617,21 @@ export class OnlineGame {
       this.stage.rig.setFollow(ownBallPos[0], ownBallPos[1], ownBallPos[2]);
     }
 
+    // Crates: bob while available, hidden while empty (the mask comes in every snapshot).
+    const mask = this.latest?.crates ?? 0;
+    this.courseGroup?.crates.forEach((c, i) => {
+      c.visible = (mask & (1 << i)) !== 0;
+      if (c.visible) animateCrate(c, this.crateBase(i), now / 1000, i * 1.7);
+    });
+    this.hud.setGadget(this.latest?.gadget ?? null);
+    this.fx.update({
+      effects: this.conn.buffer.sampleEffects(renderTick),
+      players: rps,
+      renderTick,
+      time: now / 1000,
+      dt,
+    });
+
     const canShoot = this.canShoot();
     this.controls.setEnabled(canShoot);
     this.controls.update(dt);
@@ -607,6 +662,21 @@ export class OnlineGame {
     }
 
     this.updateDebug(dt, now, w);
+  }
+
+  /**
+   * Gadget influence on the own Windup, as far as the client can know it: gum patches are static
+   * and in every snapshot, so slowing is predicted exactly. A Desk Fan's wind is not predicted
+   * (its timing depends on the server tick): the server's push shows up as a smoothed correction.
+   */
+  private windupEnv(w: Windup): WindupEnv {
+    const patches = this.latest?.effects.filter((e) => e.kind === 'gum');
+    if (!patches || patches.length === 0) return NO_ENV;
+    return { speedScale: gumScaleAt(patches, w.position()), drift: [0, 0] };
+  }
+
+  private crateBase(i: number): number {
+    return this.course?.loaded.crates[i]?.[1] ?? 0.3;
   }
 
   private actorFor(slot: number): RemoteActor {
@@ -749,6 +819,17 @@ export class OnlineGame {
       },
       /** Sends a test-hook message (only honoured by a server started with GOLFWARS_CHEATS=1). */
       cheat: (k: string) => this.conn?.send('cheat', { k }),
+      /** Test hook: give yourself a gadget / stand beside crate `i` (dx metres along x). */
+      tp: (x: number, z: number, yaw = 0) => this.conn?.send('cheat', { k: 'tp', x, z, yaw }),
+      ballAt: (x: number, z: number) => this.conn?.send('cheat', { k: 'ballat', x, z }),
+      shootBall: (yaw: number, power: number) =>
+        this.conn?.send('cheat', { k: 'shoot', yaw, power }),
+      effects: () => this.latest?.effects ?? [],
+      balance: () => ({ fanDuration: BALANCE.gadgets.fan.duration }),
+      giveGadget: (g: string) => this.conn?.send('cheat', { k: 'gadget', g }),
+      toCrate: (i: number, dx = 0) => this.conn?.send('cheat', { k: 'crate', i, dx }),
+      gadget: () => this.latest?.gadget ?? null,
+      crateMask: () => this.latest?.crates ?? 0,
       aimCameraAt: (x: number, z: number) => {
         const p = this.predictor?.windup.position();
         if (p) this.stage.rig.yaw = Math.atan2(-(x - p[0]), -(z - p[2]));

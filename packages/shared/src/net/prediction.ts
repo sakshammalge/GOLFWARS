@@ -1,4 +1,11 @@
-import type { Windup, WindupEvents, WindupInput, WindupState } from '../character/windup.js';
+import type {
+  Windup,
+  WindupEnv,
+  WindupEvents,
+  WindupInput,
+  WindupState,
+} from '../character/windup.js';
+import { NO_ENV } from '../character/windup.js';
 import type { Vec3 } from '../physics/golfSim.js';
 import { NET } from './config.js';
 
@@ -31,7 +38,14 @@ export class Predictor {
   private pending: PendingInput[] = [];
   private seq = 0;
 
-  constructor(public windup: Windup) {}
+  /**
+   * `env` supplies the gadget influences (gum) the client knows about for a Windup at a position;
+   * it is evaluated for every predicted and replayed step.
+   */
+  constructor(
+    public windup: Windup,
+    private readonly env: (w: Windup) => WindupEnv = () => NO_ENV,
+  ) {}
 
   get lastSeq(): number {
     return this.seq;
@@ -45,7 +59,7 @@ export class Predictor {
   step(input: WindupInput): { seq: number; events: WindupEvents } {
     const seq = ++this.seq;
     this.pending.push({ seq, input });
-    return { seq, events: this.windup.step(input) };
+    return { seq, events: this.windup.step(input, this.env(this.windup)) };
   }
 
   /** Rewinds to the server's state after input `ack` and replays the inputs after it. */
@@ -55,7 +69,7 @@ export class Predictor {
     while (drop < this.pending.length && this.pending[drop]!.seq <= ack) drop++;
     this.pending.splice(0, drop);
     this.windup.setState(state);
-    for (const p of this.pending) this.windup.step(p.input);
+    for (const p of this.pending) this.windup.step(p.input, this.env(this.windup));
     const after = this.windup.position();
     const delta: Vec3 = [after[0] - before[0], after[1] - before[1], after[2] - before[2]];
     const error = Math.hypot(delta[0], delta[1], delta[2]);

@@ -42,6 +42,15 @@ function holeIn(m: MatchSim, slot: number): void {
   expect(m.players.get(slot)!.holed).toBe(true);
 }
 
+/** Drops `slot`'s ball into the cup and returns the events up to and including its holed event. */
+function holeInEvents(m: MatchSim, slot: number) {
+  const cup = m.hole.cup.position;
+  m.ballOf(slot)!.teleport([cup[0], cup[1] + 0.2, cup[2]]);
+  const out = [];
+  for (let i = 0; i < 60 && !m.players.get(slot)!.holed; i++) out.push(...m.tick());
+  return out;
+}
+
 function startPlaying(m: MatchSim): void {
   run(m, 10);
   expect(m.phase).toBe('playing');
@@ -111,11 +120,17 @@ describe('MatchSim', () => {
       expect(m.phase).toBe('hole-end');
       run(m, 10);
     }
-    expect(m.phase).toBe('finished');
+    expect(m.phase).toBe('results');
     const board = m.scoreboard();
     expect(board).toHaveLength(2);
     expect(board[0]!.holes).toEqual([1, 1, 1]);
-    expect(board[0]!.total).toBe(3);
+    // 1st to hole out gets -2 per hole, 2nd gets -1: 3 strokes - 6 = -3 and 3 - 3 = 0.
+    expect(board[0]!.bonuses).toEqual([-2, -2, -2]);
+    expect(board[0]!.total).toBe(-3);
+    expect(board[1]!.bonuses).toEqual([-1, -1, -1]);
+    expect(board[1]!.total).toBe(0);
+    expect(board[0]!.places).toEqual([1, 1, 1]);
+    expect(board[1]!.places).toEqual([2, 2, 2]);
     m.dispose();
   });
 
@@ -221,5 +236,73 @@ describe('lag-compensated bonks', () => {
 
   it('caps the rewind at lagMaxRewindTicks', () => {
     expect(chase(60)).toBe(chase(NET.lagMaxRewindTicks));
+  });
+
+  it('gives the finish bonus by hole-out order and reports it in the holed event', () => {
+    const m = new MatchSim(KITCHEN_TABLE, [0, 1, 2], FAST);
+    startPlaying(m);
+    expect(holeInEvents(m, 2)).toContainEqual({ k: 'holed', p: 2, s: 1, r: 1, b: -2 });
+    expect(holeInEvents(m, 0)).toContainEqual({ k: 'holed', p: 0, s: 1, r: 2, b: -1 });
+    expect(holeInEvents(m, 1)).toContainEqual({ k: 'holed', p: 1, s: 1, r: 3, b: 0 });
+    expect(m.phase).toBe('hole-end');
+    const board = m.scoreboard();
+    expect(board.map((r) => r.bonuses[0])).toEqual([-1, 0, -2]);
+    expect(board.map((r) => r.total)).toEqual([0, 1, -1]);
+    expect(board.map((r) => r.places[0])).toEqual([2, 3, 1]);
+    m.dispose();
+  });
+
+  it('players who hole out on the same tick tie for 1st and both get -2', () => {
+    const m = new MatchSim(KITCHEN_TABLE, [0, 1, 2], FAST);
+    startPlaying(m);
+    const cup = m.hole.cup.position;
+    for (const s of [0, 1]) m.ballOf(s)!.teleport([cup[0], cup[1] + 0.2, cup[2]]);
+    const ev = run(m, 20);
+    const holed = ev.filter((e) => e.k === 'holed');
+    expect(holed).toHaveLength(2);
+    for (const e of holed) expect(e).toMatchObject({ r: 1, b: -2 });
+    // The third player holes later: place 3 (not 2), no bonus.
+    expect(holeInEvents(m, 2)).toContainEqual({ k: 'holed', p: 2, s: 1, r: 3, b: 0 });
+    m.dispose();
+  });
+
+  it('everyone timing out scores par + 3, no bonus, and ties for 1st on the hole', () => {
+    const m = new MatchSim(KITCHEN_TABLE, [0, 1], { ...FAST, holeTimeSeconds: 0.3 });
+    startPlaying(m);
+    run(m, 14);
+    expect(m.phase).toBe('hole-end');
+    const par = KITCHEN_TABLE[0]!.par;
+    const board = m.scoreboard();
+    for (const r of board) {
+      expect(r.holes).toEqual([par + 3]);
+      expect(r.bonuses).toEqual([0]);
+      expect(r.places).toEqual([1]);
+      expect(r.total).toBe(par + 3);
+    }
+    m.dispose();
+  });
+
+  it('a timeout never earns a bonus even when others hole out, and a left player keeps par + 3', () => {
+    const m = new MatchSim(KITCHEN_TABLE, [0, 1, 2], { ...FAST, holeTimeSeconds: 1 });
+    startPlaying(m);
+    m.abandon(2);
+    holeIn(m, 0);
+    for (let i = 0; i < 200 && m.phase !== 'hole-end'; i++) m.tick(); // player 1 times out
+    expect(m.phase).toBe('hole-end');
+    const [a, b, c] = m.scoreboard();
+    const par = KITCHEN_TABLE[0]!.par;
+    expect([a!.total, b!.total, c!.total]).toEqual([-1, par + 3, par + 3]);
+    expect([a!.places[0], b!.places[0], c!.places[0]]).toEqual([1, 2, 2]);
+    m.dispose();
+  });
+
+  it('abandoning during the intro scores that hole as par + 3 too', () => {
+    const m = new MatchSim(KITCHEN_TABLE, [0, 1], FAST);
+    m.abandon(1);
+    startPlaying(m);
+    holeIn(m, 0);
+    expect(m.phase).toBe('hole-end');
+    expect(m.scoreboard()[1]!.holes).toEqual([KITCHEN_TABLE[0]!.par + 3]);
+    m.dispose();
   });
 });

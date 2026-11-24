@@ -1,12 +1,14 @@
 import { Room, ServerError, type Client } from '@colyseus/core';
 import { KITCHEN_TABLE, type Hole } from '@golfwars/courses';
 import {
+  GADGETS,
   GOLF_ROOM,
   InputBuffer,
   MATCH,
   MatchSim,
   MessageType,
   NET,
+  rematchTarget,
   PLAYER_COLORS,
   PROTOCOL_VERSION,
   SnapshotEncoder,
@@ -16,6 +18,7 @@ import {
   initPhysics,
   isColorIndex,
   sanitizePacket,
+  type GadgetType,
   type GameEvent,
   type JoinOptions,
   type MatchConfig,
@@ -23,6 +26,7 @@ import {
   type PongMessage,
   type TickInput,
 } from '@golfwars/shared';
+import type { BalanceWatcher } from './balanceWatcher.js';
 import { GolfState, PlayerState } from './state.js';
 
 export interface GolfRoomConfig {
@@ -30,6 +34,10 @@ export interface GolfRoomConfig {
   holes: Hole[];
   /** Seconds a dropped player's seat is held (tests shorten it). */
   reconnectSeconds: number;
+  /** Fixes the crate RNG (tests); by default every match gets a random seed. */
+  seed?: number;
+  /** Dev only: hot-reloadable balance override (see `balanceWatcher.ts`). */
+  balance?: BalanceWatcher;
 }
 
 export const DEFAULT_ROOM_CONFIG: GolfRoomConfig = {
@@ -76,6 +84,7 @@ export class GolfRoom extends Room<GolfState> {
   private lastPump = 0;
   private acc = 0;
   private lastScoreKey = '';
+  private stopBalanceWatch: (() => void) | null = null;
 
   /** A room class with a custom config (tests use short intros and holes). */
   static withConfig(config: Partial<GolfRoomConfig>): typeof GolfRoom {
@@ -124,28 +133,28 @@ export class GolfRoom extends Room<GolfState> {
     this.onMessage(MessageType.Start, (client) => {
       if (client.sessionId === this.state.hostId && this.state.phase === 'lobby') this.startMatch();
     });
-    this.onMessage(MessageType.Rematch, (client) => {
-      if (
-        client.sessionId === this.state.hostId &&
-        this.state.phase === 'match' &&
-        this.sim?.phase === 'finished'
-      ) {
-        this.backToLobby();
+    this.onMessage(MessageType.Rematch, (client, msg: { mode?: unknown } | undefined) => {
+      if (client.sessionId !== this.state.hostId || this.state.phase !== 'match' || !this.sim) {
+        return;
       }
+      const target = rematchTarget(this.sim.phase, msg?.mode);
+      if (target === 'restart') this.restartMatch();
+      else if (target === 'lobby') this.backToLobby();
+    });
+    this.onMessage(MessageType.RematchVote, (client, msg: { v?: unknown } | undefined) => {
+      const p = this.player(client);
+      if (p && !p.abandoned && this.sim?.phase === 'results') p.vote = msg?.v === true;
     });
     this.onMessage(MessageType.Input, (client, raw: unknown) => this.onInput(client, raw));
     // Test hook for the local browser e2e: only exists when the server is started with
     // GOLFWARS_CHEATS=1 (never in production).
     if (process.env.GOLFWARS_CHEATS === '1') {
-      this.onMessage('cheat', (client, msg: { k?: unknown }) => {
-        const p = this.player(client);
-        const ball = p && this.sim?.ballOf(p.slot);
-        if (msg?.k === 'holeout' && ball && this.sim?.phase === 'playing') {
-          const cup = this.sim.hole.cup.position;
-          ball.teleport([cup[0], cup[1] + 0.2, cup[2]]);
-        }
-      });
+      this.onMessage('cheat', (client, msg: Record<string, unknown>) => this.cheat(client, msg));
     }
+
+    // Dev balance hot reload: tell every client of this room when the override changes.
+    const off = this.config.balance?.onChange((o) => this.broadcast(MessageType.Balance, { o }));
+    if (off) this.stopBalanceWatch = off;
 
     this.lastPump = performance.now();
     this.setSimulationInterval(() => this.pump(), 8);
@@ -167,6 +176,8 @@ export class GolfRoom extends Room<GolfState> {
     p.connected = true;
     this.state.players.set(client.sessionId, p);
     this.joinOrder.push(client.sessionId);
+    const override = this.config.balance?.current();
+    if (override) client.send(MessageType.Balance, { o: override });
     this.seats.set(client.sessionId, {
       slot,
       input: new InputBuffer(),
@@ -205,9 +216,56 @@ export class GolfRoom extends Room<GolfState> {
   }
 
   override onDispose(): void {
+    this.stopBalanceWatch?.();
     usedCodes.delete(this.roomId);
     this.sim?.dispose();
     this.sim = null;
+  }
+
+  /** Dev/test hook (GOLFWARS_CHEATS=1 only). Everything acts on the sender's own Windup / ball. */
+  private cheat(client: Client, m: Record<string, unknown>): void {
+    const sim = this.sim;
+    const p = this.player(client);
+    if (!sim || !p || sim.phase !== 'playing') return;
+    const ball = sim.ballOf(p.slot);
+    const windup = sim.windupOf(p.slot);
+    const num = (v: unknown, d = 0): number =>
+      typeof v === 'number' && Number.isFinite(v) ? v : d;
+    switch (m.k) {
+      case 'holeout':
+        if (ball) {
+          const cup = sim.hole.cup.position;
+          ball.teleport([cup[0], cup[1] + 0.2, cup[2]]);
+        }
+        break;
+      // {g}: hand out a gadget.
+      case 'gadget':
+        if (typeof m.g === 'string' && (GADGETS as readonly string[]).includes(m.g)) {
+          sim.grantGadget(p.slot, m.g as GadgetType);
+        }
+        break;
+      // {i, dx}: stand `dx` m beside crate i.
+      case 'crate': {
+        const c = sim.gadgets.crates[num(m.i)]?.pos;
+        if (c) windup?.setPosition([c[0] + num(m.dx), c[1] - 0.3, c[2]]);
+        break;
+      }
+      // {x, z, yaw}: put the Windup on the floor at (x, z) (floor height 0).
+      case 'tp':
+        windup?.setPosition([num(m.x), 0, num(m.z)]);
+        if (windup && typeof m.yaw === 'number') windup.yaw = m.yaw;
+        break;
+      // {x, z}: put the ball at rest at (x, z).
+      case 'ballat':
+        ball?.teleport([num(m.x), 0.152, num(m.z)]);
+        break;
+      // {yaw, power}: hit the ball without walking up to it.
+      case 'shoot':
+        ball?.shoot(num(m.yaw), num(m.power, 0.3));
+        break;
+      default:
+        break;
+    }
   }
 
   // ----------------------------------------------------------------- lobby
@@ -268,18 +326,12 @@ export class GolfRoom extends Room<GolfState> {
   private startMatch(): void {
     const slots = [...this.state.players.values()].map((p) => p.slot);
     if (slots.length === 0) return;
-    this.sim = new MatchSim(this.config.holes, slots, this.config.match);
+    const seed = this.config.seed ?? Math.floor(Math.random() * 0x100000000);
+    this.sim = new MatchSim(this.config.holes, slots, this.config.match, seed);
     this.state.phase = 'match';
     this.state.matchPhase = this.sim.phase;
     this.state.holeIndex = 0;
-    this.state.players.forEach((p) => {
-      p.ready = false;
-      p.strokes = 0;
-      p.holed = false;
-      p.total = 0;
-      p.abandoned = false;
-      p.scores.splice(0, p.scores.length);
-    });
+    this.resetScores();
     this.seats.forEach((s) => s.encoder.reset());
     void this.lock();
     this.acc = 0;
@@ -288,26 +340,48 @@ export class GolfRoom extends Room<GolfState> {
     this.syncScores(true);
   }
 
-  private backToLobby(): void {
-    this.sim?.dispose();
-    this.sim = null;
-    // Players who left for good during the match lose their seat now.
-    for (const [id, p] of [...this.state.players.entries()]) {
-      if (p.abandoned) {
-        this.state.players.delete(id);
-        this.joinOrder = this.joinOrder.filter((j) => j !== id);
-      }
-    }
-    this.state.phase = 'lobby';
-    this.state.matchPhase = 'hole-intro';
+  private resetScores(): void {
     this.state.players.forEach((p) => {
       p.ready = false;
       p.strokes = 0;
       p.holed = false;
+      p.finish = 0;
       p.total = 0;
+      p.vote = false;
+      p.abandoned = false;
       p.scores.splice(0, p.scores.length);
+      p.bonus.splice(0, p.bonus.length);
+      p.places.splice(0, p.places.length);
     });
+  }
+
+  /** Players who left for good during the match lose their seat. */
+  private dropAbandoned(): void {
+    for (const [id, p] of [...this.state.players.entries()]) {
+      if (p.abandoned) {
+        this.state.players.delete(id);
+        this.joinOrder = this.joinOrder.filter((j) => j !== id);
+        this.seats.delete(id);
+      }
+    }
     this.updateHost();
+  }
+
+  /** "Play again" at the results: a fresh match with the same players, no lobby in between. */
+  private restartMatch(): void {
+    this.sim?.dispose();
+    this.sim = null;
+    this.dropAbandoned();
+    this.startMatch();
+  }
+
+  private backToLobby(): void {
+    this.sim?.dispose();
+    this.sim = null;
+    this.dropAbandoned();
+    this.state.phase = 'lobby';
+    this.state.matchPhase = 'hole-intro';
+    this.resetScores();
     void this.unlock();
   }
 
@@ -386,11 +460,14 @@ export class GolfRoom extends Room<GolfState> {
       if (!r) return;
       p.strokes = Math.min(255, r.strokes);
       p.holed = r.holed;
+      p.finish = r.finish;
       p.total = r.total;
-      if (p.scores.length !== r.holes.length || r.holes.some((s, i) => p.scores[i] !== s)) {
-        p.scores.splice(0, p.scores.length);
-        for (const s of r.holes) p.scores.push(Math.min(255, s));
-      }
+      syncArray(
+        p.scores,
+        r.holes.map((s) => Math.min(255, s)),
+      );
+      syncArray(p.bonus, r.bonuses);
+      syncArray(p.places, r.places);
     });
   }
 
@@ -405,6 +482,21 @@ export class GolfRoom extends Room<GolfState> {
     const s = this.seats.get(sessionId);
     return s && { snapshots: s.snapshots, snapshotBytes: s.snapshotBytes };
   }
+}
+
+/** Rewrites a schema array only if its content differs (avoids needless patches). */
+function syncArray(
+  target: {
+    length: number;
+    [i: number]: number;
+    splice: (a: number, b: number) => unknown;
+    push: (...v: number[]) => unknown;
+  },
+  values: number[],
+): void {
+  if (target.length === values.length && values.every((v, i) => target[i] === v)) return;
+  target.splice(0, target.length);
+  for (const v of values) target.push(v);
 }
 
 export { GOLF_ROOM };
