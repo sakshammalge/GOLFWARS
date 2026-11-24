@@ -69,6 +69,17 @@ export interface WindupEvents {
   gotUp: boolean;
 }
 
+/** Everything about a Windup that changes while playing (plain data; used for netcode rewinds). */
+export interface WindupState {
+  feet: Vec3;
+  vel: Vec3;
+  yaw: number;
+  grounded: boolean;
+  coyote: number;
+  key: KeyState;
+  bonk: BonkState;
+}
+
 export interface BonkHit {
   attacker: number;
   victim: number;
@@ -119,6 +130,12 @@ export class Windup {
     kcc.setMinSlopeSlideAngle((c.minSlideSlopeDeg * Math.PI) / 180);
     kcc.enableSnapToGround(c.snapDistance);
     this.kcc = kcc;
+    this.roundState();
+    this.collider.setTranslation({
+      x: this.feet[0],
+      y: this.feet[1] + this.center,
+      z: this.feet[2],
+    });
   }
 
   /** Position of the feet [x, y, z]. */
@@ -159,12 +176,48 @@ export class Windup {
     return this.bonk.immuneT > 0;
   }
 
+  /** A deep copy of the full simulation state. */
+  getState(): WindupState {
+    return {
+      feet: [...this.feet],
+      vel: [...this.vel],
+      yaw: this.yaw,
+      grounded: this.grounded,
+      coyote: this.coyote,
+      key: { ...this.key },
+      bonk: { ...this.bonk, hit: [...this.bonk.hit] },
+    };
+  }
+
+  /** Restores a state from `getState()` (or the network); the next `step` continues from it. */
+  setState(s: WindupState): void {
+    this.feet = [...s.feet];
+    this.vel = [...s.vel];
+    this.yaw = s.yaw;
+    this.grounded = s.grounded;
+    this.coyote = s.coyote;
+    this.key.key = s.key.key;
+    this.key.frozen = s.key.frozen;
+    Object.assign(this.bonk, s.bonk, { hit: [...s.bonk.hit] });
+    this.roundState();
+    this.collider.setTranslation({
+      x: this.feet[0],
+      y: this.feet[1] + this.center,
+      z: this.feet[2],
+    });
+  }
+
   /** Teleports onto `feet` (no collision check) and stops. */
   setPosition(feet: Vec3): void {
     this.feet = [...feet];
     this.vel = [0, 0, 0];
     this.coyote = 0;
-    this.collider.setTranslation({ x: feet[0], y: feet[1] + this.center, z: feet[2] });
+    this.roundState();
+    this.collider.setTranslation({
+      x: this.feet[0],
+      y: this.feet[1] + this.center,
+      z: this.feet[2],
+    });
   }
 
   /**
@@ -192,6 +245,7 @@ export class Windup {
     const d = Math.hypot(dx, dz) || 1;
     this.vel[0] = (dx / d) * BONK.knockSpeed;
     this.vel[2] = (dz / d) * BONK.knockSpeed;
+    this.roundState();
   }
 
   /** Advances one fixed step. */
@@ -316,8 +370,28 @@ export class Windup {
       dt,
     );
 
+    this.roundState();
     events.fell = this.hasFallen();
     return events;
+  }
+
+  /**
+   * Rounds all simulation state to float32 (what Rapier uses internally anyway). The network
+   * sends state as float32, so after this a state that went over the wire is bit-identical to the
+   * one it came from, and client prediction replays reproduce the server exactly.
+   */
+  private roundState(): void {
+    const f = Math.fround;
+    this.feet = [f(this.feet[0]), f(this.feet[1]), f(this.feet[2])];
+    this.vel = [f(this.vel[0]), f(this.vel[1]), f(this.vel[2])];
+    this.yaw = f(this.yaw);
+    this.coyote = f(this.coyote);
+    this.key.key = f(this.key.key);
+    const b = this.bonk;
+    if (b.swingT !== null) b.swingT = f(b.swingT);
+    b.cooldown = f(b.cooldown);
+    b.toppleT = f(b.toppleT);
+    b.immuneT = f(b.immuneT);
   }
 
   dispose(): void {
@@ -379,14 +453,18 @@ export class Windup {
  * other Windup inside its arc (once per swing). Call after all `Windup.step()`s. Only Windups are
  * affected, never balls.
  */
-export function resolveBonks(windups: readonly Windup[]): BonkHit[] {
+export function resolveBonks(
+  windups: readonly Windup[],
+  /** Lag compensation: where the attacker saw `victim` (default: where it is now). */
+  victimPosition: (attacker: Windup, victim: Windup) => Vec3 = (_a, v) => v.position(),
+): BonkHit[] {
   const hits: BonkHit[] = [];
   for (const a of windups) {
     if (!hitWindowOpen(a.bonk)) continue;
     const from = a.position();
     for (const v of windups) {
       if (v === a || a.bonk.hit.includes(v.id) || !canBeBonked(v.bonk)) continue;
-      if (!inHitbox(from, a.yaw, v.position())) continue;
+      if (!inHitbox(from, a.yaw, victimPosition(a, v))) continue;
       a.bonk.hit.push(v.id);
       v.receiveBonk(from);
       hits.push({ attacker: a.id, victim: v.id });

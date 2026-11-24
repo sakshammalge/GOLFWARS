@@ -26,13 +26,32 @@ export function initPhysics(): Promise<void> {
   return initPromise;
 }
 
+export interface CourseWorld {
+  world: World;
+  loaded: LoadedHole;
+}
+
+/** Builds the Rapier world for one hole: course colliders only, ready for queries. */
+export function createCourseWorld(hole: Hole): CourseWorld {
+  const world = new RAPIER.World({ x: 0, y: PHYSICS.gravity, z: 0 });
+  world.timestep = STEP_DT;
+  const loaded = loadHoleIntoWorld(world, hole, {
+    surfaces: PHYSICS.surfaces,
+    wallRestitution: PHYSICS.wallRestitution,
+    bumperRestitution: PHYSICS.bumperRestitution,
+  });
+  // Course colliders are static: one step puts them in the broad phase so character-controller
+  // and ray queries work before the first real tick.
+  world.step();
+  return { world, loaded };
+}
+
 /**
- * One hole's physics: the course colliders plus a single golf ball, advanced in fixed 60 Hz
- * steps. No rendering and no browser APIs, so the server can run the same class in M3.
+ * One golf ball in a Rapier world. Several balls can share a world (M3 matches): they only see the
+ * course (`BALL_GROUPS`), never each other or any Windup. Per tick call `prepare()` on every ball,
+ * step the world once, then `afterStep()` on every ball.
  */
-export class GolfSim {
-  readonly world: World;
-  readonly loaded: LoadedHole;
+export class Ball {
   private readonly body: RigidBody;
   private readonly collider: Collider;
   private phase: BallPhase = 'moving';
@@ -40,33 +59,23 @@ export class GolfSim {
   private lastRest: Vec3;
   private grounded: Surface | null = null;
 
-  /** `initPhysics()` must have resolved. */
-  constructor(readonly hole: Hole) {
-    this.world = new RAPIER.World({ x: 0, y: PHYSICS.gravity, z: 0 });
-    this.world.timestep = STEP_DT;
-    this.loaded = loadHoleIntoWorld(this.world, hole, {
-      surfaces: PHYSICS.surfaces,
-      wallRestitution: PHYSICS.wallRestitution,
-      bumperRestitution: PHYSICS.bumperRestitution,
-    });
-
-    // Course colliders are static: one step puts them in the broad phase so character-controller
-    // and ray queries work before the first real tick.
-    this.world.step();
-
+  constructor(
+    private readonly world: World,
+    private readonly loaded: LoadedHole,
+  ) {
     const b = PHYSICS.ball;
-    this.body = this.world.createRigidBody(
+    this.body = world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
         .setCcdEnabled(true)
         .setLinearDamping(b.airLinearDamping)
         .setAngularDamping(b.airAngularDamping),
     );
-    this.collider = this.world.createCollider(
+    this.collider = world.createCollider(
       RAPIER.ColliderDesc.ball(b.radius)
         .setMass(b.mass)
         .setRestitution(b.restitution)
         .setFriction(b.friction)
-        // Windups are invisible to the ball (see character/groups.ts).
+        // Windups and other balls are invisible to the ball (see character/groups.ts).
         .setCollisionGroups(BALL_GROUPS),
       this.body,
     );
@@ -139,7 +148,7 @@ export class GolfSim {
   shoot(yaw: number, power: number): boolean {
     if (this.phase !== 'resting') return false;
     this.lastRest = this.position();
-    const [vx, vy, vz] = GolfSim.shotVelocity(yaw, power);
+    const [vx, vy, vz] = Ball.shotVelocity(yaw, power);
     this.body.setLinvel({ x: vx, y: vy, z: vz }, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     this.phase = 'moving';
@@ -147,14 +156,16 @@ export class GolfSim {
     return true;
   }
 
-  /** Advances exactly one fixed step (1/60 s). */
-  step(): StepEvents {
+  /** Before `world.step()`: finds the surface underfoot and sets the rolling damping. */
+  prepare(): void {
     this.updateGrounded();
     const mat = this.grounded ? PHYSICS.surfaces[this.grounded] : null;
     this.body.setLinearDamping(mat ? mat.rollLinearDamping : PHYSICS.ball.airLinearDamping);
     this.body.setAngularDamping(mat ? mat.rollAngularDamping : PHYSICS.ball.airAngularDamping);
-    this.world.step();
+  }
 
+  /** After `world.step()`: out of bounds, cup and rest detection. */
+  afterStep(): StepEvents {
     if (this.phase === 'holed') return NO_EVENTS;
     const events: StepEvents = { rest: false, holed: false, outOfBounds: false };
 
@@ -192,9 +203,10 @@ export class GolfSim {
     return events;
   }
 
-  /** Releases the Rapier world (WASM memory). */
+  /** Removes the ball from the world. */
   dispose(): void {
-    this.world.free();
+    this.world.removeCollider(this.collider, false);
+    this.world.removeRigidBody(this.body);
   }
 
   private updateGrounded(): void {
@@ -221,6 +233,71 @@ export class GolfSim {
       p[2] < b.minZ - m ||
       p[2] > b.maxZ + m
     );
+  }
+}
+
+/**
+ * One hole's physics for offline play: the course colliders plus a single golf ball, advanced in
+ * fixed 60 Hz steps. No rendering and no browser APIs. Online matches use `MatchSim`, which puts
+ * several `Ball`s (and Windups) in one world.
+ */
+export class GolfSim {
+  readonly world: World;
+  readonly loaded: LoadedHole;
+  private readonly ball: Ball;
+
+  /** `initPhysics()` must have resolved. */
+  constructor(readonly hole: Hole) {
+    const cw = createCourseWorld(hole);
+    this.world = cw.world;
+    this.loaded = cw.loaded;
+    this.ball = new Ball(this.world, this.loaded);
+  }
+
+  teePosition(): Vec3 {
+    return this.ball.teePosition();
+  }
+  get state(): BallPhase {
+    return this.ball.state;
+  }
+  get surface(): Surface | null {
+    return this.ball.surface;
+  }
+  get lastRestingPosition(): Vec3 {
+    return this.ball.lastRestingPosition;
+  }
+  position(): Vec3 {
+    return this.ball.position();
+  }
+  rotation(): [number, number, number, number] {
+    return this.ball.rotation();
+  }
+  velocity(): Vec3 {
+    return this.ball.velocity();
+  }
+  speed(): number {
+    return this.ball.speed();
+  }
+  teleport(pos: Vec3, markAsLastRest = true): void {
+    this.ball.teleport(pos, markAsLastRest);
+  }
+  static shotVelocity(yaw: number, power: number): Vec3 {
+    return Ball.shotVelocity(yaw, power);
+  }
+  shoot(yaw: number, power: number): boolean {
+    return this.ball.shoot(yaw, power);
+  }
+
+  /** Advances exactly one fixed step (1/60 s). */
+  step(): StepEvents {
+    this.ball.prepare();
+    this.world.step();
+    return this.ball.afterStep();
+  }
+
+  /** Releases the Rapier world (WASM memory). */
+  dispose(): void {
+    this.world.free();
   }
 }
 

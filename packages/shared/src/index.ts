@@ -3,3 +3,5 @@ export * from './physics/config.js';
 export * from './physics/golfSim.js';
 export * from './rules.js';
 export * from './character/index.js';
+export * from './net/index.js';
+export * from './match/index.js';
